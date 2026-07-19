@@ -47,7 +47,11 @@ function getWidgetJs(): string {
   'use strict';
 
   var config = window.NeuralSupportConfig || {};
-  var CONVEX_URL = config.convexUrl || '';
+
+  // Auto-fix: force .convex.cloud — /api/query and /api/mutation only work on .convex.cloud, not .convex.site
+  var rawUrl = (config.convexUrl || '').replace(/\\/+$/, '');
+  var CONVEX_URL = rawUrl.replace('.convex.site', '.convex.cloud');
+
   var SITE_URL = config.siteUrl || window.location.origin;
   var PRIMARY = config.primaryColor || '#6366f1';
   var GREETING = config.greeting || "Hi! How can I help you today? 👋";
@@ -399,7 +403,6 @@ function getWidgetJs(): string {
   function pollMessages() {
     var convoId = conversationId;
     if (!convoId) {
-      // Try to find conversation
       convexQuery('conversations:getConversationBySession', { sessionId: sessionId }).then(function(convo) {
         if (convo) conversationId = convo._id;
       }).catch(function(){});
@@ -423,7 +426,6 @@ function getWidgetJs(): string {
         });
       }
 
-      // Check conversation state for agent mode
       convexQuery('conversations:getConversationBySession', { sessionId: sessionId }).then(function(convo) {
         if (convo) agentMode = convo.agentMode;
       }).catch(function(){});

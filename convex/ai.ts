@@ -43,7 +43,7 @@ function getModel(): string {
 function getEmbedModel(): string {
   const provider = process.env.EMBED_PROVIDER ?? "openai";
   if (provider === "ollama") return "nomic-embed-text";
-  if (provider === "gemini") return "text-embedding-004";
+  if (provider === "gemini") return "gemini-embedding-001";
   return "text-embedding-3-small";
 }
 
@@ -75,7 +75,11 @@ async function getEmbedding(text: string): Promise<number[]> {
         }),
       }
     );
-    const data = (await res.json()) as { embedding?: { values?: number[] } };
+    const data = (await res.json()) as { embedding?: { values?: number[] }; error?: { message?: string; status?: string } };
+    if (data.error) {
+      console.error("[NeuralSupport] Gemini embedding error:", JSON.stringify(data.error));
+      return [];
+    }
     return data.embedding?.values ?? [];
   }
 
