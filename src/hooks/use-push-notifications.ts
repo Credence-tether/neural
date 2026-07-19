@@ -1,9 +1,7 @@
 import { api } from "@/convex/_generated/api.js";
 import { useAction } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-const SECRET_KEY = "ns-push-secret";
 
 type NotificationStatus =
   | "unsupported"
@@ -33,29 +31,30 @@ function isInIframe(): boolean {
 }
 
 export function usePushNotifications(isAuthenticated?: boolean) {
-  const [secret, setSecret] = useState<string | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission | null>(null);
   const getVapidPublicKey = useAction(api.pushNotifications.getVapidPublicKey);
   const registerSubscription = useAction(api.pushNotifications.subscribe);
-  const identifySubscription = useAction(api.pushNotifications.identify);
   const removeSubscription = useAction(api.pushNotifications.unsubscribe);
-  const hasIdentified = useRef(false);
 
   useEffect(() => {
     if ("Notification" in window) setPermission(Notification.permission);
-    const stored = localStorage.getItem(SECRET_KEY);
-    if (stored) setSecret(stored);
-  }, []);
+    if (!isAuthenticated || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready.then(async (registration) => {
+      const existing = await registration.pushManager.getSubscription();
+      setIsSubscribed(!!existing);
+    });
+  }, [isAuthenticated]);
 
   const status: NotificationStatus = useMemo(() => {
     if (!("Notification" in window) || !("serviceWorker" in navigator)) return "unsupported";
     if (isInIframe()) return "iframe";
     if (permission === "denied") return "denied";
     if (isLoading) return "loading";
-    if (secret !== null) return "subscribed";
+    if (isSubscribed) return "subscribed";
     return "unsubscribed";
-  }, [permission, isLoading, secret]);
+  }, [permission, isLoading, isSubscribed]);
 
   const subscribe = useCallback(async () => {
     if (status === "unsupported" || status === "iframe" || status === "denied") {
@@ -76,12 +75,9 @@ export function usePushNotifications(isAuthenticated?: boolean) {
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
       });
 
-      const { secret: newSecret } = await registerSubscription({
-        subscription: JSON.stringify(subscription),
-      });
+      await registerSubscription({ subscription: JSON.stringify(subscription) });
 
-      localStorage.setItem(SECRET_KEY, newSecret);
-      setSecret(newSecret);
+      setIsSubscribed(true);
       return { permission: "granted", subscribed: true };
     } catch (error) {
       toast.error("Failed to enable push notifications.");
@@ -91,42 +87,23 @@ export function usePushNotifications(isAuthenticated?: boolean) {
     }
   }, [status, getVapidPublicKey, registerSubscription]);
 
-  const identify = useCallback(async () => {
-    const currentSecret = secret ?? localStorage.getItem(SECRET_KEY);
-    if (!currentSecret) return { noSubscription: true };
-    try {
-      return await identifySubscription({ secret: currentSecret });
-    } catch (error) {
-      return { error: String(error) };
-    }
-  }, [secret, identifySubscription]);
-
-  useEffect(() => {
-    if (isAuthenticated && !hasIdentified.current && secret) {
-      hasIdentified.current = true;
-      void identify();
-    }
-    if (!isAuthenticated) hasIdentified.current = false;
-  }, [isAuthenticated, secret, identify]);
-
   const unsubscribe = useCallback(async () => {
-    const currentSecret = secret ?? localStorage.getItem(SECRET_KEY);
-    if (!currentSecret) return { error: "No subscription to remove" };
     setIsLoading(true);
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
-      if (subscription) await subscription.unsubscribe();
-      await removeSubscription({ secret: currentSecret });
-      localStorage.removeItem(SECRET_KEY);
-      setSecret(null);
+      if (subscription) {
+        await removeSubscription({ endpoint: subscription.endpoint });
+        await subscription.unsubscribe();
+      }
+      setIsSubscribed(false);
       return { success: true };
     } catch (error) {
       return { error: String(error) };
     } finally {
       setIsLoading(false);
     }
-  }, [secret, removeSubscription]);
+  }, [removeSubscription]);
 
-  return { status, subscribe, identify, unsubscribe };
+  return { status, subscribe, unsubscribe };
 }

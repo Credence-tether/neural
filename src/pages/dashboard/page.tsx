@@ -21,18 +21,21 @@ import { useConvexAuth } from "convex/react";
 import { cn } from "@/lib/utils.ts";
 import {
   MessageSquare, Users, Database, Settings, Bell, BellOff, Zap,
-  LogOut, BarChart2,
+  LogOut, BarChart2, ArrowLeft, Info,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { toast } from "sonner";
+
+type MobilePanel = "sidebar" | "thread" | "details";
 
 function DashboardInner() {
   const [selectedConvo, setSelectedConvo] = useState<Id<"conversations"> | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"conversations" | "visitors" | "analytics" | "knowledge" | "settings">("conversations");
   const [rightPanel, setRightPanel] = useState<"visitor" | "live">("visitor");
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("sidebar");
   const { isAuthenticated } = useConvexAuth();
   const { status, subscribe, unsubscribe } = usePushNotifications(isAuthenticated);
-  const { signout } = useAuth();
+  const { signOut } = useAuth();
   const currentUser = useQuery(api.users.getCurrentUser);
   const allConvos = useQuery(api.conversations.getAllConversations);
 
@@ -52,10 +55,20 @@ function DashboardInner() {
     }
   };
 
+  const handleSelectConvo = (id: Id<"conversations">) => {
+    setSelectedConvo(id);
+    setMobilePanel("thread");
+  };
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border">
+      <div
+        className={cn(
+          "w-full md:w-64 flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border",
+          mobilePanel === "sidebar" ? "flex" : "hidden md:flex"
+        )}
+      >
         {/* Logo */}
         <div className="px-4 py-4 flex items-center gap-2.5 border-b border-sidebar-border">
           <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
@@ -105,7 +118,7 @@ function DashboardInner() {
         {/* Sidebar content */}
         <div className="flex-1 min-h-0 overflow-hidden">
           {sidebarTab === "conversations" && (
-            <ConversationList selectedId={selectedConvo} onSelect={setSelectedConvo} />
+            <ConversationList selectedId={selectedConvo} onSelect={handleSelectConvo} />
           )}
           {sidebarTab === "visitors" && <LiveVisitorsPanel />}
           {sidebarTab === "analytics" && <AnalyticsPanel />}
@@ -140,7 +153,7 @@ function DashboardInner() {
               )}
             </button>
             <button
-              onClick={() => void signout()}
+              onClick={() => void signOut()}
               title="Sign out"
               className="p-1.5 rounded hover:bg-sidebar-accent transition-colors cursor-pointer"
             >
@@ -151,7 +164,30 @@ function DashboardInner() {
       </div>
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div
+        className={cn(
+          "flex-1 flex-col min-w-0",
+          mobilePanel === "thread" ? "flex" : "hidden md:flex"
+        )}
+      >
+        {/* Mobile-only header bar */}
+        {selectedConvo && (
+          <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0">
+            <button
+              onClick={() => setMobilePanel("sidebar")}
+              className="p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <span className="text-sm font-medium flex-1">Conversation</span>
+            <button
+              onClick={() => setMobilePanel("details")}
+              className="p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {selectedConvo ? (
           <ConversationThread conversationId={selectedConvo} />
         ) : (
@@ -178,7 +214,22 @@ function DashboardInner() {
       </div>
 
       {/* Right panel — visitor + live */}
-      <div className="w-72 flex-shrink-0 flex flex-col border-l border-border">
+      <div
+        className={cn(
+          "w-full md:w-72 flex-shrink-0 flex-col border-l border-border",
+          mobilePanel === "details" ? "flex" : "hidden md:flex"
+        )}
+      >
+        {/* Mobile-only back bar */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0">
+          <button
+            onClick={() => setMobilePanel("thread")}
+            className="p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium">Details</span>
+        </div>
         <div className="flex border-b border-border flex-shrink-0">
           <button
             onClick={() => setRightPanel("visitor")}
@@ -225,7 +276,7 @@ export default function Dashboard() {
         </div>
       </AuthLoading>
       <Unauthenticated>
-        <div className="h-screen flex items-center justify-center bg-background">
+        <div className="h-screen flex items-center justify-center bg-background px-4">
           <div className="text-center space-y-6">
             <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto">
               <Zap className="h-8 w-8 text-primary" />

@@ -1,1 +1,2 @@
-export { useUser, useAuth } from "@usehercules/auth/react";
+import { useAuthActions } from "@convex-dev/auth/react";
+export { useAuthActions as useAuth };

@@ -1,17 +1,18 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
+  ...authTables,
   // Agent users (support staff)
   users: defineTable({
-    tokenIdentifier: v.string(),
     name: v.optional(v.string()),
     email: v.optional(v.string()),
     avatar: v.optional(v.string()),
     role: v.optional(v.union(v.literal("agent"), v.literal("admin"))),
     isOnline: v.optional(v.boolean()),
     lastSeen: v.optional(v.string()),
-  }).index("by_token", ["tokenIdentifier"]),
+  }),
 
   // Visitor sessions (anonymous website visitors)
   visitors: defineTable({
@@ -119,13 +120,15 @@ export default defineSchema({
     completedAt: v.optional(v.string()),
   }).index("by_site", ["siteUrl"]),
 
-  // Push notification identities (agents)
-  pushIdentities: defineTable({
-    secret: v.string(),
-    visitorId: v.string(),
+  // Push notification subscriptions (per agent device)
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
   })
-    .index("by_secret", ["secret"])
-    .index("by_visitorId", ["visitorId"]),
+    .index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
 
   // Canned responses (agent quick-reply templates)
   cannedResponses: defineTable({

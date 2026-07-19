@@ -1,35 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { ConvexError } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const updateCurrentUser = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        name: identity.name,
-        email: identity.email,
-        avatar: identity.profileUrl,
-        isOnline: true,
-        lastSeen: new Date().toISOString(),
-      });
-      return existing._id;
-    }
-
-    const userId = await ctx.db.insert("users", {
-      tokenIdentifier: identity.tokenIdentifier,
-      name: identity.name,
-      email: identity.email,
-      avatar: identity.profileUrl,
-      role: "agent",
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    await ctx.db.patch(userId, {
       isOnline: true,
       lastSeen: new Date().toISOString(),
     });
@@ -40,22 +18,17 @@ export const updateCurrentUser = mutation({
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-
-    return ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    return ctx.db.get(userId);
   },
 });
 
 export const getAllAgents = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
-
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
     return ctx.db.query("users").collect();
   },
 });
@@ -63,19 +36,11 @@ export const getAllAgents = query({
 export const setOnlineStatus = mutation({
   args: { isOnline: v.boolean() },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return;
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
-
-    if (user) {
-      await ctx.db.patch(user._id, {
-        isOnline: args.isOnline,
-        lastSeen: new Date().toISOString(),
-      });
-    }
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return;
+    await ctx.db.patch(userId, {
+      isOnline: args.isOnline,
+      lastSeen: new Date().toISOString(),
+    });
   },
 });

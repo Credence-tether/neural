@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel.d.ts";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const sendMessage = mutation({
   args: {
@@ -11,19 +12,15 @@ export const sendMessage = mutation({
     aiProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-
     let agentId: Id<"users"> | undefined = undefined;
     let agentName: string | undefined = undefined;
 
-    if (args.role === "agent" && identity) {
-      const agent = await ctx.db
-        .query("users")
-        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-        .unique();
-      if (agent) {
-        agentId = agent._id;
-        agentName = agent.name;
+    if (args.role === "agent") {
+      const userId = await getAuthUserId(ctx);
+      if (userId) {
+        const agent = await ctx.db.get(userId);
+        agentId = userId;
+        agentName = agent?.name;
       }
     }
 
@@ -37,7 +34,6 @@ export const sendMessage = mutation({
       timestamp: new Date().toISOString(),
     });
 
-    // Update conversation last message time
     await ctx.db.patch(args.conversationId, {
       lastMessageAt: new Date().toISOString(),
     });
@@ -54,16 +50,5 @@ export const getMessages = query({
       .withIndex("by_conversation_time", (q) => q.eq("conversationId", args.conversationId))
       .order("asc")
       .take(200);
-  },
-});
-
-export const getRecentMessages = query({
-  args: { conversationId: v.id("conversations"), limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    return ctx.db
-      .query("messages")
-      .withIndex("by_conversation_time", (q) => q.eq("conversationId", args.conversationId))
-      .order("desc")
-      .take(args.limit ?? 10);
   },
 });

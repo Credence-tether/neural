@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ConvexError } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const getOrCreateConversation = mutation({
   args: {
@@ -59,8 +60,8 @@ export const listConversations = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
     const q = ctx.db.query("conversations").order("desc");
     return q.paginate(args.paginationOpts);
@@ -70,8 +71,8 @@ export const listConversations = query({
 export const getAllConversations = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
     return ctx.db.query("conversations").order("desc").take(100);
   },
@@ -80,20 +81,13 @@ export const getAllConversations = query({
 export const agentTakeOver = mutation({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
-
-    const agent = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
-
-    if (!agent) throw new ConvexError({ message: "Agent not found", code: "NOT_FOUND" });
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
     await ctx.db.patch(args.conversationId, {
       agentMode: true,
       status: "agent_handling",
-      assignedAgentId: agent._id,
+      assignedAgentId: userId,
       aiStruggling: false,
     });
   },
@@ -102,8 +96,8 @@ export const agentTakeOver = mutation({
 export const agentLeave = mutation({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
     await ctx.db.patch(args.conversationId, {
       agentMode: false,
@@ -116,8 +110,8 @@ export const agentLeave = mutation({
 export const closeConversation = mutation({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
     await ctx.db.patch(args.conversationId, {
       status: "closed",

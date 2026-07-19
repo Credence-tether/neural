@@ -1,138 +1,86 @@
-import { forwardRef, useCallback, useEffect } from "react";
-import { type VariantProps } from "class-variance-authority";
-import { Loader2, LogIn, LogOut } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@usehercules/auth/react";
-import { Button, buttonVariants } from "@/components/ui/button.tsx";
+import { useState, useCallback } from "react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { Button } from "@/components/ui/button.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { cn } from "@/lib/utils.ts";
 
-export interface SignInButtonProps
-  extends
-    Omit<React.ComponentProps<"button">, "onClick">,
-    VariantProps<typeof buttonVariants> {
-  /**
-   * Custom onClick handler that runs before authentication action
-   */
-  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  /**
-   * Whether to show icons in the button
-   * @default true
-   */
-  showIcon?: boolean;
-  /**
-   * Custom text for sign in state
-   * @default "Sign In"
-   */
-  signInText?: string;
-  /**
-   * Custom text for sign out state
-   * @default "Sign Out"
-   */
-  signOutText?: string;
-  /**
-   * Custom text for loading state
-   * @default "Signing In..." or "Signing Out..."
-   */
-  loadingText?: string;
-  /**
-   * Whether to use the asChild pattern
-   * @default false
-   */
-  asChild?: boolean;
-}
+export function SignInButton({ className }: { className?: string }) {
+  const { signIn } = useAuthActions();
+  const [step, setStep] = useState<"signIn" | "signUp">("signIn");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-/**
- * A button component that handles authentication sign in/out with proper loading states
- * and accessibility features.
- */
-export const SignInButton = forwardRef<HTMLButtonElement, SignInButtonProps>(
-  (
-    {
-      onClick,
-      disabled,
-      showIcon = true,
-      signInText = "Sign In",
-      signOutText = "Sign Out",
-      loadingText,
-      className,
-      variant,
-      size,
-      asChild = false,
-      ...props
-    },
-    ref,
-  ) => {
-    const { isAuthenticated, signin, signout, isLoading, error } = useAuth();
-
-    useEffect(() => {
-      if (error) {
-        toast.error("Login error", {
-          description: error.message,
-        });
-        console.error("Login error", error);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
+      setIsLoading(true);
+      try {
+        await signIn("password", { email, password, flow: step });
+      } catch (err) {
+        setError(
+          step === "signIn"
+            ? "Invalid email or password."
+            : "Could not create account. Try a different email or a longer password.",
+        );
+      } finally {
+        setIsLoading(false);
       }
-    }, [error]);
+    },
+    [signIn, email, password, step],
+  );
 
-    const handleClick = useCallback(
-      async (event: React.MouseEvent<HTMLButtonElement>) => {
-        // Run custom onClick first
-        onClick?.(event);
-
-        try {
-          if (isAuthenticated) {
-            await signout();
-          } else {
-            await signin();
-          }
-        } catch (err) {
-          console.error("Authentication error:", err);
-          // Don't prevent the default here as the auth library handles errors
-        }
-      },
-      [isAuthenticated, signout, signin, onClick],
-    );
-
-    const isDisabled = disabled || isLoading;
-    const defaultLoadingText = isAuthenticated
-      ? "Signing Out..."
-      : "Signing In...";
-    const currentLoadingText = loadingText || defaultLoadingText;
-
-    const buttonText = isLoading
-      ? currentLoadingText
-      : isAuthenticated
-        ? signOutText
-        : signInText;
-
-    const icon = isLoading ? (
-      <Loader2 className="size-4 animate-spin" />
-    ) : isAuthenticated ? (
-      <LogOut className="size-4" />
-    ) : (
-      <LogIn className="size-4" />
-    );
-
-    return (
-      <Button
-        ref={ref}
-        onClick={handleClick}
-        disabled={isDisabled}
-        variant={variant}
-        size={size}
-        className={className}
-        asChild={asChild}
-        aria-label={
-          isAuthenticated
-            ? "Sign out of your account"
-            : "Sign in to your account"
-        }
-        aria-describedby={error ? "auth-error" : undefined}
-        {...props}
-      >
-        {showIcon && icon}
-        {buttonText}
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className={cn("flex flex-col gap-4 w-full max-w-sm", className)}
+    >
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
+          type="password"
+          required
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+        />
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" disabled={isLoading}>
+        {isLoading
+          ? "Please wait..."
+          : step === "signIn"
+            ? "Sign In"
+            : "Sign Up"}
       </Button>
-    );
-  },
-);
-
-SignInButton.displayName = "SignInButton";
+      <button
+        type="button"
+        className="text-sm text-muted-foreground hover:underline"
+        onClick={() => {
+          setStep(step === "signIn" ? "signUp" : "signIn");
+          setError(null);
+        }}
+      >
+        {step === "signIn"
+          ? "Don't have an account? Sign up"
+          : "Already have an account? Sign in"}
+      </button>
+    </form>
+  );
+}
