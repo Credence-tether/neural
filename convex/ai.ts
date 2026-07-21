@@ -259,7 +259,7 @@ export const generateAiReply = internalAction({
                 .map((c) => ({ ...c, score: cosineSimilarity(queryEmbedding, c.embedding) }))
                 .sort((a, b) => b.score - a.score)
                 .slice(0, 4)
-                .filter((c) => c.score > 0.4);
+                .filter((c) => c.score > 0.15);
 
           if (scored.length > 0) {
             contextText = scored.map((c) => `[${c.title ?? c.url}]\n${c.content}`).join("\n\n---\n\n");
