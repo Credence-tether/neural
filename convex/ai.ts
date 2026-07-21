@@ -269,7 +269,16 @@ export const generateAiReply = internalAction({
 
       const noContextNote = contextText
         ? `## Knowledge Base Context\n\n${contextText}`
-        : "## Knowledge Base Context\n\n(No relevant articles found — apply Rule 1: keep visitor engaged, do NOT say you don't know.)";
+        : `## Knowledge Base Context\n\n(No relevant articles found from knowledge base.)
+
+## About WolvCapital (always available)
+WolvCapital is a U.S. regulated digital investment platform on BNB Smart Chain offering 8%–25% APY staking plans.
+Plans: Pioneer (8% APY, 30 days), Horizon (15% APY, 60 days), Zenith (25% APY, 90 days).
+WOLV token (BEP-20): 0xe0167279aef7bf4ad313d261da82e8366822270c
+KYC compliant, FinCEN registered, PCI-DSS compliant.
+Support email: support@mail.wolvcapital.com
+Website: https://wolvcapital.com
+Apply Rule 1: keep visitor engaged using the above info.`;
 
       const systemPrompt = `You are an elite, highly engaging live support and growth agent for our platform.
 Your primary goals are to resolve customer issues, maintain visitor engagement, and maximize lead conversion.
