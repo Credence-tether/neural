@@ -135,13 +135,14 @@ function getWidgetJs(): string {
       background: \${PRIMARY}; color: white; flex-shrink: 0;
     }
     #ns-avatar {
-      width: 36px; height: 36px; border-radius: 50%;
-      background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center;
-      font-size: 16px; flex-shrink: 0;
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; color: white;
     }
+    #ns-avatar svg { width: 19px; height: 19px; }
     #ns-header-info { flex: 1; min-width: 0; }
-    #ns-header-name { font-size: 14px; font-weight: 600; }
-    #ns-header-status { font-size: 11px; opacity: 0.85; display: flex; align-items: center; gap: 5px; }
+    #ns-header-name { font-size: 15px; font-weight: 600; }
+    #ns-header-status { font-size: 12px; opacity: 0.88; display: flex; align-items: center; gap: 5px; margin-top: 1px; }
     #ns-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; }
     #ns-close { background: none; border: none; cursor: pointer; color: white; opacity: 0.8; padding: 4px; }
     #ns-close:hover { opacity: 1; }
@@ -161,10 +162,10 @@ function getWidgetJs(): string {
     .ns-msg.ns-ai .ns-msg-icon { background: rgba(99,102,241,0.2); color: #818cf8; }
     .ns-msg.ns-agent .ns-msg-icon { background: rgba(34,197,94,0.2); color: #4ade80; }
     .ns-msg-body { display: flex; flex-direction: column; gap: 2px; }
-    .ns-msg-label { font-size: 10px; color: rgba(255,255,255,0.4); padding: 0 6px; }
+    .ns-msg-label { font-size: 11px; color: rgba(255,255,255,0.45); padding: 0 6px; font-weight: 500; }
     .ns-bubble-text {
-      padding: 9px 13px; border-radius: 14px; font-size: 13.5px; line-height: 1.5;
-      word-break: break-word;
+      padding: 10px 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.55;
+      word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }
     .ns-msg.ns-visitor .ns-bubble-text { background: \${PRIMARY}; color: white; border-radius: 14px 14px 4px 14px; }
     .ns-msg.ns-ai .ns-bubble-text { background: rgba(255,255,255,0.07); color: #e8eaf0; border-radius: 4px 14px 14px 14px; }
@@ -178,11 +179,11 @@ function getWidgetJs(): string {
     .ns-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes ns-bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
     #ns-identity-form { padding: 16px; background: rgba(255,255,255,0.04); border-top: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; }
-    #ns-identity-form p { font-size: 12px; color: rgba(255,255,255,0.5); margin: 0 0 10px; }
+    #ns-identity-form p { font-size: 12.5px; color: rgba(255,255,255,0.55); margin: 0 0 10px; }
     .ns-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
     .ns-identity-input {
       flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px; padding: 8px 12px; color: #e8eaf0; font-size: 13px; outline: none;
+      border-radius: 8px; padding: 9px 12px; color: #e8eaf0; font-size: 13.5px; outline: none;
     }
     .ns-identity-input:focus { border-color: \${PRIMARY}; }
     .ns-identity-input::placeholder { color: rgba(255,255,255,0.3); }
@@ -192,8 +193,8 @@ function getWidgetJs(): string {
     }
     #ns-input {
       flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px; padding: 9px 14px; color: #e8eaf0; font-size: 13.5px; outline: none; resize: none;
-      line-height: 1.4; max-height: 100px; transition: border-color 0.2s;
+      border-radius: 10px; padding: 10px 14px; color: #e8eaf0; font-size: 14.5px; outline: none; resize: none;
+      line-height: 1.45; max-height: 100px; transition: border-color 0.2s;
     }
     #ns-input:focus { border-color: \${PRIMARY}; }
     #ns-input::placeholder { color: rgba(255,255,255,0.3); }
@@ -204,7 +205,7 @@ function getWidgetJs(): string {
     }
     #ns-send:disabled { opacity: 0.4; cursor: default; }
     #ns-send:not(:disabled):hover { opacity: 0.9; transform: scale(1.05); }
-    #ns-powered { text-align: center; font-size: 10px; color: rgba(255,255,255,0.2); padding: 6px 0 8px; flex-shrink: 0; }
+    #ns-powered { text-align: center; font-size: 10.5px; color: rgba(255,255,255,0.28); padding: 6px 0 8px; flex-shrink: 0; }
     @media (max-width: 420px) {
       #ns-window { width: calc(100vw - 16px) !important; left: 8px !important; right: 8px !important; height: calc(100vh - 90px) !important; }
     }
@@ -217,7 +218,7 @@ function getWidgetJs(): string {
   widget.innerHTML = \`
     <div id="ns-window" role="dialog" aria-label="Support Chat">
       <div id="ns-header">
-        <div id="ns-avatar">🤖</div>
+        <div id="ns-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
         <div id="ns-header-info">
           <div id="ns-header-name">\${AGENT_NAME}</div>
           <div id="ns-header-status"><div id="ns-status-dot"></div> Online · Typically replies instantly</div>
@@ -264,13 +265,26 @@ function getWidgetJs(): string {
     div.className = 'ns-msg ns-' + msg.role;
     div.dataset.id = msg._id || msg.tempId || '';
 
-    var iconText = msg.role === 'agent' ? '👤' : msg.role === 'ai' ? '🤖' : '';
-    var icon = msg.role !== 'visitor' ? '<div class="ns-msg-icon">' + iconText + '</div>' : '';
+    var AGENT_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>';
+    var AI_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>';
+    var iconSvg = msg.role === 'agent' ? AGENT_ICON : msg.role === 'ai' ? AI_ICON : '';
+    var icon = msg.role !== 'visitor' ? '<div class="ns-msg-icon">' + iconSvg + '</div>' : '';
     var label = '';
     if (msg.role === 'agent' && msg.agentName) label = '<div class="ns-msg-label">' + msg.agentName + '</div>';
 
-    div.innerHTML = icon + '<div class="ns-msg-body">' + label + '<div class="ns-bubble-text">' + escapeHtml(msg.content) + '</div></div>';
+    div.innerHTML = icon + '<div class="ns-msg-body">' + label + '<div class="ns-bubble-text">' + (msg.role === 'visitor' ? escapeHtml(msg.content) : renderMarkdown(msg.content)) + '</div></div>';
     return div;
+  }
+
+  function renderMarkdown(s) {
+    var e = String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    e = e.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    e = e.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    e = e.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#818cf8;text-decoration:underline;">$1</a>');
+    e = e.replace(/^[\-\*] (.+)$/gm, '<li style="margin:2px 0;">$1</li>');
+    e = e.replace(/(<li[^>]*>(?:.|\n)*?<\/li>(?:\n<li[^>]*>(?:.|\n)*?<\/li>)*)/g, '<ul style="margin:4px 0;padding-left:16px;list-style:disc;">$1</ul>');
+    e = e.replace(/\n/g, '<br>');
+    return e;
   }
 
   function escapeHtml(s) {

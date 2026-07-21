@@ -35,7 +35,7 @@ function getModel(): string {
   if (process.env.AI_MODEL) return process.env.AI_MODEL;
   const provider = process.env.AI_PROVIDER ?? "openai";
   if (provider === "groq") return "llama-3.3-70b-versatile";
-  if (provider === "gemini") return "gemini-2.0-flash";
+  if (provider === "gemini") return "gemini-2.5-flash";
   if (provider === "ollama") return "llama3.2";
   return "gpt-4o-mini";
 }
@@ -144,6 +144,7 @@ export const crawlAndEmbed = action({
         body: JSON.stringify({
           url: args.siteUrl,
           limit: 25,
+          excludePaths: ["blog/*", "blog", "news/*", "news", "articles/*", "posts/*"],
           scrapeOptions: { formats: ["markdown"] },
         }),
       });
@@ -177,11 +178,25 @@ export const crawlAndEmbed = action({
       await ctx.runMutation(internal.aiHelpers.clearChunks, { siteUrl: args.siteUrl });
 
       let totalCrawled = 0;
+      let chunksSaved = 0;
+      let chunksFailed = 0;
       for (const page of pages) {
         if (!page.markdown) continue;
         const chunks = chunkText(page.markdown);
         for (let i = 0; i < chunks.length; i++) {
+          // Respect Gemini free tier: 100 requests/min → wait 700ms between calls
+          const provider = process.env.EMBED_PROVIDER ?? "openai";
+          if (provider === "gemini") {
+            await new Promise((res) => setTimeout(res, 700));
+          }
           const embedding = await getEmbedding(chunks[i]);
+          if (embedding.length === 0) {
+            // Embedding call failed (bad key, quota, wrong model, etc.) —
+            // never store a chunk with no vector, it's useless for search
+            // and silently pollutes the knowledge base.
+            chunksFailed++;
+            continue;
+          }
           await ctx.runMutation(internal.aiHelpers.insertChunk, {
             siteUrl: args.siteUrl,
             url: page.metadata?.sourceURL ?? args.siteUrl,
@@ -190,8 +205,15 @@ export const crawlAndEmbed = action({
             embedding,
             chunkIndex: i,
           });
+          chunksSaved++;
         }
         totalCrawled++;
+      }
+
+      if (chunksSaved === 0 && chunksFailed > 0) {
+        throw new Error(
+          `All ${chunksFailed} chunk embeddings failed — check EMBED_PROVIDER credentials/model. No knowledge was saved.`
+        );
       }
 
       await ctx.runMutation(internal.aiHelpers.completeCrawlJob, {
@@ -231,11 +253,13 @@ export const generateAiReply = internalAction({
         });
         if (chunks.length > 0 && args.visitorMessage.length > 3) {
           const queryEmbedding = await getEmbedding(args.visitorMessage);
-          const scored = chunks
-            .map((c) => ({ ...c, score: cosineSimilarity(queryEmbedding, c.embedding) }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 4)
-            .filter((c) => c.score > 0.4);
+          const scored = queryEmbedding.length === 0
+            ? []
+            : chunks
+                .map((c) => ({ ...c, score: cosineSimilarity(queryEmbedding, c.embedding) }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 4)
+                .filter((c) => c.score > 0.4);
 
           if (scored.length > 0) {
             contextText = scored.map((c) => `[${c.title ?? c.url}]\n${c.content}`).join("\n\n---\n\n");
@@ -297,7 +321,7 @@ ${noContextNote}`;
       const completion = await openai.chat.completions.create({
         model,
         messages,
-        max_tokens: 600,
+        max_tokens: 1500,
         temperature: 0.72,
       });
 

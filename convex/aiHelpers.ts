@@ -66,6 +66,25 @@ export const insertChunk = internalMutation({
   },
 });
 
+// One-off cleanup: run once via `npx convex run aiHelpers:cleanupEmptyEmbeddings '{}'`
+// (add --prod if cleaning the production deployment) to delete any chunks that
+// were saved before the embedding-failure fix, which have an empty embedding
+// array and are useless for search.
+export const cleanupEmptyEmbeddings = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("knowledgeChunks").collect();
+    let deleted = 0;
+    for (const chunk of all) {
+      if (!chunk.embedding || chunk.embedding.length === 0) {
+        await ctx.db.delete(chunk._id);
+        deleted++;
+      }
+    }
+    return { totalChecked: all.length, deleted };
+  },
+});
+
 export const getChunksForSite = internalQuery({
   args: { siteUrl: v.string() },
   handler: async (ctx, args) => {

@@ -17,6 +17,7 @@ import LiveVisitorsPanel from "./_components/LiveVisitorsPanel.tsx";
 import KnowledgeBasePanel from "./_components/KnowledgeBasePanel.tsx";
 import SettingsPanel from "./_components/SettingsPanel.tsx";
 import { usePushNotifications } from "@/hooks/use-push-notifications.ts";
+import VisitorDetailCard from "./_components/VisitorDetailCard.tsx";
 import { useConvexAuth } from "convex/react";
 import { cn } from "@/lib/utils.ts";
 import {
@@ -30,6 +31,7 @@ type MobilePanel = "sidebar" | "thread" | "details";
 
 function DashboardInner() {
   const [selectedConvo, setSelectedConvo] = useState<Id<"conversations"> | null>(null);
+  const [selectedVisitorId, setSelectedVisitorId] = useState<Id<"visitors"> | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"conversations" | "visitors" | "analytics" | "knowledge" | "settings">("conversations");
   const [rightPanel, setRightPanel] = useState<"visitor" | "live">("visitor");
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("sidebar");
@@ -38,7 +40,6 @@ function DashboardInner() {
   const { signOut } = useAuth();
   const currentUser = useQuery(api.users.getCurrentUser);
   const allConvos = useQuery(api.conversations.getAllConversations);
-
   const openCount = allConvos?.filter(c => c.status !== "closed").length ?? 0;
   const strugglingCount = allConvos?.filter(c => c.aiStruggling).length ?? 0;
 
@@ -57,7 +58,13 @@ function DashboardInner() {
 
   const handleSelectConvo = (id: Id<"conversations">) => {
     setSelectedConvo(id);
+    setSelectedVisitorId(null);
     setMobilePanel("thread");
+  };
+
+  const handleSelectVisitor = (id: Id<"visitors">) => {
+    setSelectedVisitorId(id);
+    setRightPanel("visitor");
   };
 
   return (
@@ -257,9 +264,9 @@ function DashboardInner() {
         </div>
         <div className="flex-1 min-h-0 overflow-hidden">
           {rightPanel === "visitor" ? (
-            <VisitorPanel conversationId={selectedConvo} />
+            <VisitorPanel conversationId={selectedConvo} visitorId={selectedVisitorId} />
           ) : (
-            <LiveVisitorsPanel />
+            <LiveVisitorsPanel onSelect={handleSelectVisitor} />
           )}
         </div>
       </div>

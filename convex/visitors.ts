@@ -133,6 +133,15 @@ export const getVisitorBySession = query({
   },
 });
 
+export const getVisitorById = query({
+  args: { visitorId: v.id("visitors") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+    return ctx.db.get(args.visitorId);
+  },
+});
+
 export const getOnlineVisitors = query({
   args: {},
   handler: async (ctx) => {
