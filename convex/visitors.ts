@@ -148,11 +148,18 @@ export const getOnlineVisitors = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
-    return ctx.db
+    // Only visitors with a heartbeat in the last 2 minutes are truly "live".
+    // isOnline alone is unreliable: the offline beacon often never fires
+    // (mobile tab kills, network drops), so stale rows pile up forever.
+    const cutoff = Date.now() - 2 * 60 * 1000;
+    const candidates = await ctx.db
       .query("visitors")
       .withIndex("by_isOnline", (q) => q.eq("isOnline", true))
       .order("desc")
-      .take(100);
+      .take(200);
+    return candidates.filter(
+      (v) => new Date(v.lastSeen).getTime() > cutoff
+    );
   },
 });
 

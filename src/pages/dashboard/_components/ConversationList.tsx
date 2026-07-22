@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils.ts";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
-import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
   Bot, User, Headphones, AlertTriangle, Search, X,
 } from "lucide-react";
@@ -103,7 +102,7 @@ export default function ConversationList({ selectedId, onSelect }: Props) {
       </div>
 
       {/* List */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="px-2 pb-2 space-y-0.5">
           {!filtered && (
             <div className="flex items-center justify-center py-10">
@@ -197,7 +196,7 @@ export default function ConversationList({ selectedId, onSelect }: Props) {
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

@@ -406,6 +406,17 @@
     siteUrl: SITE_URL,
   }).catch(function(){});
 
+  // Heartbeat: refresh lastSeen every 45s so the dashboard's
+  // 2-minute live window keeps genuinely active visitors visible
+  setInterval(function() {
+    convexMutation('visitors:upsertVisitor', {
+      sessionId: sessionId,
+      currentPage: window.location.href,
+      currentPageTitle: document.title,
+      siteUrl: SITE_URL,
+    }).catch(function(){});
+  }, 45000);
+
   // Track page navigation (SPA-friendly)
   var lastPage = window.location.href;
   setInterval(function() {
@@ -420,12 +431,12 @@
   }, 1500);
 
   // Get geo location
-  fetch('https://ip-api.com/json/?fields=country,city,query').then(function(r) { return r.json(); }).then(function(geo) {
+  fetch('https://ipwho.is/').then(function(r) { return r.json(); }).then(function(geo) {
     convexMutation('visitors:updateVisitorLocation', {
       sessionId: sessionId,
       country: geo.country || undefined,
       city: geo.city || undefined,
-      ip: geo.query || undefined,
+      ip: geo.ip || undefined,
     }).catch(function(){});
   }).catch(function(){});
 

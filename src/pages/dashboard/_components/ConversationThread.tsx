@@ -2,7 +2,6 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { useRef, useEffect, useState, useMemo } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils.ts";
@@ -205,7 +204,7 @@ export default function ConversationThread({ conversationId }: Props) {
       )}
 
       {/* ── Messages ── */}
-      <ScrollArea className="flex-1 px-3 md:px-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-3 md:px-4">
         <div className="py-3 space-y-4">
           {grouped.map(({ day, items }) => (
             <div key={day} className="space-y-2.5">
@@ -253,7 +252,7 @@ export default function ConversationThread({ conversationId }: Props) {
           ))}
         </div>
         <div ref={bottomRef} className="h-1" />
-      </ScrollArea>
+      </div>
 
       {/* ── Composer ── */}
       {!isClosed && isAgentMode && (
