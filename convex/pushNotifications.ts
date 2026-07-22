@@ -63,6 +63,27 @@ export const sendNotification = internalAction({
     ),
   },
   handler: async (ctx, args) => {
+    // ── Telegram mirror: every dashboard notification also goes to Telegram ──
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+    const tgChatId = process.env.TELEGRAM_CHAT_ID;
+    if (tgToken && tgChatId) {
+      const text = `\u{1F514} *${args.title.replace(/([_*\[\]()~\`>#+\-=|{}.!])/g, "\\$1")}*` +
+        (args.body ? `\n${args.body.replace(/([_*\[\]()~\`>#+\-=|{}.!])/g, "\\$1")}` : "");
+      try {
+        await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: tgChatId,
+            text,
+            parse_mode: "MarkdownV2",
+          }),
+        });
+      } catch (e) {
+        console.error("Telegram notify failed:", e);
+      }
+    }
+
     configureWebPush();
 
     const subs = await ctx.runQuery(internal.pushSubscriptions.getAllSubscriptions);
