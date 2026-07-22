@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { ConvexError } from "convex/values";
+import { normalizeSiteUrl } from "./siteUrl";
 
 // Called by the widget when a visitor sends a message
 export const visitorSendMessage = mutation({
@@ -64,6 +65,14 @@ export const visitorSendMessage = mutation({
     await ctx.db.patch(convo._id, { lastMessageAt: now });
     await ctx.db.patch(visitor._id, { isOnline: true, lastSeen: now });
 
+    // tawk-style: notify agents on EVERY visitor message, with a preview
+    const preview = args.content.length > 90 ? args.content.slice(0, 90) + "…" : args.content;
+    await ctx.scheduler.runAfter(0, internal.pushNotifications.sendNotification, {
+      title: `💬 ${visitor.name ?? "Visitor"} · ${normalizeSiteUrl(args.siteUrl) || "your site"}`,
+      body: preview,
+      urgency: "high",
+    });
+
     // If agent mode is on, don't trigger AI
     if (convo.agentMode) {
       return { conversationId: convo._id, agentMode: true };
@@ -81,11 +90,11 @@ export const visitorSendMessage = mutation({
       .slice(0, -1) // exclude the one we just saved
       .map((m) => ({ role: m.role, content: m.content }));
 
-    // Schedule AI response
+    // Schedule AI response (siteUrl normalized so KB lookups always match)
     await ctx.scheduler.runAfter(0, internal.ai.generateAiReply, {
       conversationId: convo._id,
       visitorMessage: args.content,
-      siteUrl: args.siteUrl,
+      siteUrl: normalizeSiteUrl(args.siteUrl),
       messageHistory,
     });
 
@@ -112,12 +121,22 @@ export const widgetInit = mutation({
       .unique();
 
     if (visitor) {
+      // Returning visitor — notify if they were away for 10+ minutes
+      const awayMs = Date.now() - new Date(visitor.lastSeen).getTime();
+      const wasAway = !visitor.isOnline || awayMs > 10 * 60 * 1000;
       await ctx.db.patch(visitor._id, {
         currentPage: args.currentPage,
         currentPageTitle: args.currentPageTitle,
         isOnline: true,
         lastSeen: now,
       });
+      if (wasAway) {
+        await ctx.scheduler.runAfter(0, internal.pushNotifications.sendNotification, {
+          title: "👋 Visitor returned",
+          body: `${visitor.name ?? "A visitor"} is back on ${args.currentPageTitle ?? args.currentPage}`,
+          urgency: "normal",
+        });
+      }
     } else {
       const vId = await ctx.db.insert("visitors", {
         sessionId: args.sessionId,
@@ -133,8 +152,8 @@ export const widgetInit = mutation({
 
       // New visitor — schedule push notification to agents
       await ctx.scheduler.runAfter(0, internal.pushNotifications.sendNotification, {
-        title: "New Visitor",
-        body: `A visitor just landed on ${args.siteUrl ?? "your site"}`,
+        title: "🟢 New visitor",
+        body: `Someone just landed on ${args.currentPageTitle ?? normalizeSiteUrl(args.siteUrl) ?? "your site"}`,
         urgency: "normal",
       });
     }

@@ -19,6 +19,7 @@ import type * as knowledge from "../knowledge.js";
 import type * as messages from "../messages.js";
 import type * as pushNotifications from "../pushNotifications.js";
 import type * as pushSubscriptions from "../pushSubscriptions.js";
+import type * as siteUrl from "../siteUrl.js";
 import type * as users from "../users.js";
 import type * as visitors from "../visitors.js";
 import type * as widget from "../widget.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   pushNotifications: typeof pushNotifications;
   pushSubscriptions: typeof pushSubscriptions;
+  siteUrl: typeof siteUrl;
   users: typeof users;
   visitors: typeof visitors;
   widget: typeof widget;

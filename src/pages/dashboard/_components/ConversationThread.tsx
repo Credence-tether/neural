@@ -2,7 +2,6 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { useRef, useEffect, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { toast } from "sonner";
@@ -201,7 +200,7 @@ export default function ConversationThread({ conversationId }: Props) {
         </div>
       )}
 
-      <ScrollArea className="flex-1 px-4 py-3">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto px-4 py-3">
         <div className="space-y-3">
           {messages.map((msg) => {
             const isVisitor = msg.role === "visitor";
@@ -214,9 +213,9 @@ export default function ConversationThread({ conversationId }: Props) {
                     <User className="h-3 w-3 text-muted-foreground" />
                   </div>
                 )}
-                <div className="max-w-[70%] space-y-1">
+                <div className="max-w-[70%] min-w-0 space-y-1">
                   <div className={cn(
-                    "px-3 py-2 rounded-xl text-sm leading-relaxed",
+                    "px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words overflow-hidden",
                     isVisitor
                       ? "bg-secondary text-foreground rounded-tl-none"
                       : isAgent
@@ -248,7 +247,7 @@ export default function ConversationThread({ conversationId }: Props) {
           })}
         </div>
         <div ref={bottomRef} />
-      </ScrollArea>
+      </div>
 
       {!isClosed && isAgentMode && (
         <div className="p-3 border-t border-border flex-shrink-0 relative">

@@ -278,12 +278,20 @@ function getWidgetJs(): string {
 
   function renderMarkdown(s) {
     var e = String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    e = e.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    e = e.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    e = e.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#818cf8;text-decoration:underline;">$1</a>');
-    e = e.replace(/^[\-\*] (.+)$/gm, '<li style="margin:2px 0;">$1</li>');
-    e = e.replace(/(<li[^>]*>(?:.|\n)*?<\/li>(?:\n<li[^>]*>(?:.|\n)*?<\/li>)*)/g, '<ul style="margin:4px 0;padding-left:16px;list-style:disc;">$1</ul>');
-    e = e.replace(/\n/g, '<br>');
+    // Markdown tables -> simple lines: drop |---| separators, join cells with a dash
+    e = e.replace(/^\\s*\\|?[\\s:|-]+\\|[\\s:|-]*$/gm, '');
+    e = e.replace(/^\\s*\\|(.+)\\|\\s*$/gm, function(_, row) {
+      return row.split('|').map(function(c){ return c.trim(); }).filter(Boolean).join(' \u2014 ');
+    });
+    // Headers (### Title) -> bold line
+    e = e.replace(/^#{1,6}\\s+(.+)$/gm, '<strong>$1</strong>');
+    e = e.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
+    e = e.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
+    e = e.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#818cf8;text-decoration:underline;">$1</a>');
+    e = e.replace(/^[\\-\\*] (.+)$/gm, '<li style="margin:2px 0;">$1</li>');
+    e = e.replace(/(<li[^>]*>(?:.|\\n)*?<\\/li>(?:\\n<li[^>]*>(?:.|\\n)*?<\\/li>)*)/g, '<ul style="margin:4px 0;padding-left:16px;list-style:disc;">$1</ul>');
+    e = e.replace(/\\n{3,}/g, '\\n\\n');
+    e = e.replace(/\\n/g, '<br>');
     return e;
   }
 

@@ -34,7 +34,8 @@ function getOpenAIClient(): OpenAI {
 function getModel(): string {
   if (process.env.AI_MODEL) return process.env.AI_MODEL;
   const provider = process.env.AI_PROVIDER ?? "openai";
-  if (provider === "groq") return "llama-3.3-70b-versatile";
+  // llama-3.3-70b-versatile was deprecated by Groq (June 17, 2026 notice)
+  if (provider === "groq") return "openai/gpt-oss-120b";
   if (provider === "gemini") return "gemini-2.5-flash";
   if (provider === "ollama") return "llama3.2";
   return "gpt-4o-mini";
@@ -90,17 +91,6 @@ async function getEmbedding(text: string): Promise<number[]> {
     input: text,
   });
   return resp.data[0]?.embedding ?? [];
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-10);
 }
 
 function chunkText(text: string, maxChunkSize = 600): string[] {
@@ -245,40 +235,50 @@ export const generateAiReply = internalAction({
     const MAX_RETRIES = 3;
 
     try {
-      // RAG: get relevant chunks
+      // RAG: score chunks inside the Convex query runtime and receive
+      // only the top 4 (a few KB) instead of every chunk + embedding (~3.8 MB).
+      // Wrapped in its own try/catch: a broken EMBED provider must degrade to
+      // "answer without context", NOT throw and burn all retries.
       let contextText = "";
-      if (args.siteUrl) {
-        const chunks = await ctx.runQuery(internal.aiHelpers.getChunksForSite, {
+      try {
+      if (args.siteUrl && args.visitorMessage.length > 3) {
+        const hasKb = await ctx.runQuery(internal.aiHelpers.hasChunksForSite, {
           siteUrl: args.siteUrl,
         });
-        if (chunks.length > 0 && args.visitorMessage.length > 3) {
-          const queryEmbedding = await getEmbedding(args.visitorMessage);
-          const scored = queryEmbedding.length === 0
-            ? []
-            : chunks
-                .map((c) => ({ ...c, score: cosineSimilarity(queryEmbedding, c.embedding) }))
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 4)
-                .filter((c) => c.score > 0.15);
-
-          if (scored.length > 0) {
-            contextText = scored.map((c) => `[${c.title ?? c.url}]\n${c.content}`).join("\n\n---\n\n");
+        if (hasKb) {
+          // Embed the message WITH recent context. A bare reply like
+          // "horizon" embeds poorly on its own, but "which investment plan
+          // are you interested in? horizon" matches the Horizon plan chunk.
+          const ragQueryText = [
+            ...args.messageHistory.slice(-2).map((m) => m.content),
+            args.visitorMessage,
+          ]
+            .join("\n")
+            .slice(-1000);
+          const queryEmbedding = await getEmbedding(ragQueryText);
+          if (queryEmbedding.length > 0) {
+            const scored = await ctx.runQuery(internal.aiHelpers.searchChunks, {
+              siteUrl: args.siteUrl,
+              queryEmbedding,
+            });
+            if (scored.length > 0) {
+              contextText = scored
+                .map((c) => `[${c.title ?? c.url}]\n${c.content}`)
+                .join("\n\n---\n\n");
+            }
           }
         }
+      }
+      } catch (ragErr) {
+        console.error(
+          `[NeuralSupport] RAG failed (EMBED_PROVIDER=${process.env.EMBED_PROVIDER ?? "openai"}), continuing without context:`,
+          String(ragErr)
+        );
       }
 
       const noContextNote = contextText
         ? `## Knowledge Base Context\n\n${contextText}`
-        : `## Knowledge Base Context\n\n(No relevant articles found from knowledge base.)
-
-## About WolvCapital (always available)
-WolvCapital is a U.S. regulated digital investment platform on BNB Smart Chain offering 8%–25% APY staking plans.
-Plans: Pioneer (8% APY, 30 days), Horizon (15% APY, 60 days), Zenith (25% APY, 90 days).
-WOLV token (BEP-20): 0xe0167279aef7bf4ad313d261da82e8366822270c
-KYC compliant, FinCEN registered, PCI-DSS compliant.
-Support email: support@mail.wolvcapital.com
-Website: https://wolvcapital.com
-Apply Rule 1: keep visitor engaged using the above info.`;
+        : "## Knowledge Base Context\n\n(No relevant articles found — apply Rule 1: keep visitor engaged, do NOT say you don't know.)";
 
       const systemPrompt = `You are an elite, highly engaging live support and growth agent for our platform.
 Your primary goals are to resolve customer issues, maintain visitor engagement, and maximize lead conversion.
@@ -290,8 +290,16 @@ However, if the retrieved context does not contain the answer, you must NEVER sh
 1. HANDLING MISSING KNOWLEDGE & ENGAGEMENT:
    If the knowledge base does not have the answer, do NOT say "I don't know."
    Instead, keep the visitor actively engaged to protect the lead.
-   Pivot smoothly by exploring alternative options, asking clarifying questions,
+   Pivot smoothly by exploring alternative options, asking ONE clarifying question,
    or highlighting relevant platform benefits and features while the backend processes the human handoff.
+   STRICT ANTI-LOOP RULE: You may ask the visitor to clarify or rephrase AT MOST ONCE
+   per conversation. If you have already asked a clarifying question earlier in this
+   conversation (check the chat history) and you still cannot answer their reply,
+   do NOT ask again — start your response with [TRIGGER_HANDOFF], tell them a team
+   member will follow up on that specific question shortly, and offer help with
+   anything else in the meantime.
+   NEVER send a message that is identical or nearly identical to any of your
+   previous messages in this conversation.
 
 2. SILENT HUMAN HANDOFF TRIGGER:
    If a user explicitly requests a human agent, or if the knowledge base cannot resolve
@@ -308,9 +316,12 @@ However, if the retrieved context does not contain the answer, you must NEVER sh
    Do not ask for information the user has already provided in this conversation.
 
 5. CONVERSATIONAL STYLE:
+   You are writing inside a SMALL chat bubble (~300px wide on mobile).
    Frontload the most essential information in your first sentence.
-   Keep responses concise, scannable, and highly encouraging to drive conversions.
-   Use markdown only when it clearly improves readability (bullet lists, code snippets).
+   Keep replies under ~120 words. Short paragraphs and simple "- " bullets only.
+   NEVER use markdown tables (| pipes |), headers (#, ##, ###), horizontal rules,
+   or code blocks — they render as raw symbols in the chat bubble.
+   Bold key terms sparingly with **double asterisks**.
 
 ${noContextNote}`;
 
@@ -361,6 +372,27 @@ ${noContextNote}`;
         provider: `${provider}/${model}`,
       });
     } catch (err) {
+      const provider = process.env.AI_PROVIDER ?? "openai";
+      const model = getModel();
+      const keyName =
+        provider === "groq" ? "GROQ_API_KEY"
+        : provider === "gemini" ? "GEMINI_API_KEY"
+        : provider === "ollama" ? "(none)"
+        : "OPENAI_API_KEY";
+      const keySet =
+        provider === "ollama" ||
+        Boolean(
+          provider === "groq" ? process.env.GROQ_API_KEY
+          : provider === "gemini" ? process.env.GEMINI_API_KEY
+          : process.env.OPENAI_API_KEY
+        );
+      console.error(
+        `[NeuralSupport] generateAiReply attempt ${retryCount + 1}/${MAX_RETRIES + 1} FAILED. ` +
+        `provider=${provider} model=${model} ${keyName} set in THIS deployment: ${keySet} ` +
+        `(env vars are per-deployment — dev and prod are separate!). Error:`,
+        String(err)
+      );
+
       if (retryCount < MAX_RETRIES) {
         await ctx.scheduler.runAfter(2000 * (retryCount + 1), internal.ai.generateAiReply, {
           ...args,
@@ -372,7 +404,7 @@ ${noContextNote}`;
           conversationId: args.conversationId,
           content:
             "I'm having trouble finding a complete answer to your question. I've flagged this for a human agent who will be with you shortly. Is there anything else I can help with in the meantime?",
-          provider: "fallback",
+          provider: `fallback — ${String(err).slice(0, 140)}`,
         });
 
         await ctx.runMutation(internal.aiHelpers.markStruggling, {

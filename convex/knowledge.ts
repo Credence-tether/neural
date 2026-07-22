@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { ConvexError } from "convex/values";
+import { normalizeSiteUrl } from "./siteUrl";
 
 export const getKnowledgeChunks = query({
   args: { siteUrl: v.string() },
@@ -10,7 +11,7 @@ export const getKnowledgeChunks = query({
 
     return ctx.db
       .query("knowledgeChunks")
-      .withIndex("by_site", (q) => q.eq("siteUrl", args.siteUrl))
+      .withIndex("by_site", (q) => q.eq("siteUrl", normalizeSiteUrl(args.siteUrl)))
       .collect();
   },
 });
@@ -20,7 +21,7 @@ export const getKnowledgeChunksPublic = query({
   handler: async (ctx, args) => {
     return ctx.db
       .query("knowledgeChunks")
-      .withIndex("by_site", (q) => q.eq("siteUrl", args.siteUrl))
+      .withIndex("by_site", (q) => q.eq("siteUrl", normalizeSiteUrl(args.siteUrl)))
       .collect();
   },
 });
@@ -33,7 +34,7 @@ export const getCrawlJobs = query({
 
     return ctx.db
       .query("crawlJobs")
-      .withIndex("by_site", (q) => q.eq("siteUrl", args.siteUrl))
+      .withIndex("by_site", (q) => q.eq("siteUrl", normalizeSiteUrl(args.siteUrl)))
       .order("desc")
       .take(10);
   },
@@ -47,7 +48,7 @@ export const deleteKnowledgeBase = mutation({
 
     const chunks = await ctx.db
       .query("knowledgeChunks")
-      .withIndex("by_site", (q) => q.eq("siteUrl", args.siteUrl))
+      .withIndex("by_site", (q) => q.eq("siteUrl", normalizeSiteUrl(args.siteUrl)))
       .take(500);
 
     for (const chunk of chunks) {
