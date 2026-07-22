@@ -1,19 +1,24 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Textarea } from "@/components/ui/textarea.tsx";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils.ts";
-import { format } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import {
-  Bot, User, Headphones, Send, UserCheck, X, Cpu, AlertTriangle, Zap,
+  Bot, User, Headphones, Send, UserCheck, X, AlertTriangle, Zap, Check,
 } from "lucide-react";
 
-type Props = {
-  conversationId: Id<"conversations">;
-};
+type Props = { conversationId: Id<"conversations"> };
+
+function dayLabel(ts: string) {
+  const d = new Date(ts);
+  if (isToday(d)) return "Today";
+  if (isYesterday(d)) return "Yesterday";
+  return format(d, "MMM d, yyyy");
+}
 
 export default function ConversationThread({ conversationId }: Props) {
   const messages = useQuery(api.messages.getMessages, { conversationId });
@@ -30,10 +35,19 @@ export default function ConversationThread({ conversationId }: Props) {
   const [slashIndex, setSlashIndex] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendingRef = useRef(false); // debounce guard — blocks double-fire
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages?.length]);
+
+  // Auto-grow textarea
+  const handleAutoGrow = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  };
 
   const filteredCanned = slashQuery !== null && cannedResponses
     ? cannedResponses.filter(
@@ -46,13 +60,10 @@ export default function ConversationThread({ conversationId }: Props) {
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setText(val);
+    handleAutoGrow();
     const slashMatch = val.match(/(?:^|\s)\/(\S*)$/);
-    if (slashMatch) {
-      setSlashQuery(slashMatch[1]);
-      setSlashIndex(0);
-    } else {
-      setSlashQuery(null);
-    }
+    if (slashMatch) { setSlashQuery(slashMatch[1]); setSlashIndex(0); }
+    else setSlashQuery(null);
   };
 
   const insertCannedResponse = (content: string) => {
@@ -62,32 +73,21 @@ export default function ConversationThread({ conversationId }: Props) {
     setText(newText);
     setSlashQuery(null);
     textareaRef.current?.focus();
+    requestAnimationFrame(handleAutoGrow);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (slashQuery !== null && filteredCanned.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSlashIndex((i) => Math.min(i + 1, filteredCanned.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSlashIndex((i) => Math.max(i - 1, 0));
-        return;
-      }
+      if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex(i => Math.min(i + 1, filteredCanned.length - 1)); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setSlashIndex(i => Math.max(i - 1, 0)); return; }
       if (e.key === "Tab" || e.key === "Enter") {
         e.preventDefault();
         const chosen = filteredCanned[slashIndex];
         if (chosen) insertCannedResponse(chosen.content);
         return;
       }
-      if (e.key === "Escape") {
-        setSlashQuery(null);
-        return;
-      }
+      if (e.key === "Escape") { setSlashQuery(null); return; }
     }
-
     if (e.key === "Enter" && !e.shiftKey && slashQuery === null) {
       e.preventDefault();
       void handleSend();
@@ -95,44 +95,48 @@ export default function ConversationThread({ conversationId }: Props) {
   };
 
   const handleSend = async () => {
-    if (!text.trim() || !conversation) return;
+    if (!text.trim() || !conversation || sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
+    const outgoing = text.trim();
+    setText(""); // optimistic clear
+    requestAnimationFrame(handleAutoGrow);
     try {
-      await sendMessage({ conversationId, role: "agent", content: text.trim() });
-      setText("");
+      await sendMessage({ conversationId, role: "agent", content: outgoing });
     } catch {
-      toast.error("Failed to send message");
+      setText(outgoing); // restore on failure
+      toast.error("Message failed — tap send to retry");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
 
   const handleTakeOver = async () => {
-    try {
-      await takeOver({ conversationId });
-      toast.success("You've taken over this conversation");
-    } catch {
-      toast.error("Failed to take over");
-    }
+    try { await takeOver({ conversationId }); toast.success("You're now handling this chat"); }
+    catch { toast.error("Couldn't take over"); }
   };
-
   const handleLeave = async () => {
-    try {
-      await agentLeave({ conversationId });
-      toast("AI has resumed the conversation");
-    } catch {
-      toast.error("Failed to leave");
-    }
+    try { await agentLeave({ conversationId }); toast("AI resumed"); }
+    catch { toast.error("Couldn't hand back"); }
+  };
+  const handleClose = async () => {
+    try { await closeConvo({ conversationId }); toast.success("Chat closed"); }
+    catch { toast.error("Couldn't close"); }
   };
 
-  const handleClose = async () => {
-    try {
-      await closeConvo({ conversationId });
-      toast.success("Conversation closed");
-    } catch {
-      toast.error("Failed to close");
+  // Group messages by day for separators
+  const grouped = useMemo(() => {
+    if (!messages) return [];
+    const out: { day: string; items: typeof messages }[] = [];
+    for (const msg of messages) {
+      const day = dayLabel(msg.timestamp);
+      const last = out[out.length - 1];
+      if (last && last.day === day) last.items.push(msg);
+      else out.push({ day, items: [msg] });
     }
-  };
+    return out;
+  }, [messages]);
 
   if (!conversation || !messages) {
     return (
@@ -146,120 +150,122 @@ export default function ConversationThread({ conversationId }: Props) {
   const isClosed = conversation.status === "closed";
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-3">
+    <div className="flex flex-col h-full min-h-0">
+
+      {/* ── Header ── */}
+      <div className="flex items-center gap-3 px-3 md:px-4 py-2.5 border-b border-border flex-shrink-0">
+        <div className="relative flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center">
             <User className="h-4 w-4 text-primary" />
           </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              {conversation.visitorName ?? "Anonymous Visitor"}
-            </p>
-            <div className="flex items-center gap-2">
-              {conversation.visitorEmail && (
-                <span className="text-xs text-muted-foreground">{conversation.visitorEmail}</span>
-              )}
-              <span className={cn(
-                "text-xs px-1.5 py-0.5 rounded border",
-                isAgentMode
-                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                  : conversation.aiStruggling
-                  ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                  : "bg-violet-500/15 text-violet-400 border-violet-500/30"
-              )}>
-                {isAgentMode ? "Agent mode" : conversation.aiStruggling ? "AI struggling" : "AI handling"}
-              </span>
-            </div>
-          </div>
+          <div className={cn(
+            "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background",
+            isClosed ? "bg-muted-foreground/40" : isAgentMode ? "bg-emerald-500" : "bg-violet-500"
+          )} />
         </div>
-        <div className="flex items-center gap-2">
-          {!isClosed && (
-            <>
-              {isAgentMode ? (
-                <Button size="sm" variant="secondary" onClick={handleLeave} className="text-xs h-7 gap-1">
-                  <Bot className="h-3 w-3" /> Return to AI
-                </Button>
-              ) : (
-                <Button size="sm" onClick={handleTakeOver} className="text-xs h-7 gap-1">
-                  <UserCheck className="h-3 w-3" /> Take Over
-                </Button>
-              )}
-              <Button size="sm" variant="secondary" onClick={handleClose} className="text-xs h-7 gap-1">
-                <X className="h-3 w-3" /> Close
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">
+            {conversation.visitorName ?? "Anonymous"}
+          </p>
+          <p className="text-xs text-muted-foreground truncate">
+            {isClosed ? "Closed" : isAgentMode ? "You're handling" : conversation.aiStruggling ? "AI needs help" : "AI handling"}
+            {conversation.visitorEmail && ` · ${conversation.visitorEmail}`}
+          </p>
+        </div>
+        {!isClosed && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {isAgentMode ? (
+              <Button size="sm" variant="secondary" onClick={handleLeave} className="text-xs h-8 gap-1 px-2.5">
+                <Bot className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">To AI</span>
               </Button>
-            </>
-          )}
-        </div>
+            ) : (
+              <Button size="sm" onClick={handleTakeOver} className="text-xs h-8 gap-1 px-2.5">
+                <UserCheck className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Take over</span>
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={handleClose} className="text-xs h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
-      {conversation.aiStruggling && !isAgentMode && (
-        <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-2">
+      {/* ── Struggling banner ── */}
+      {conversation.aiStruggling && !isAgentMode && !isClosed && (
+        <button
+          onClick={handleTakeOver}
+          className="mx-3 mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25 flex items-center gap-2 text-left cursor-pointer hover:bg-amber-500/15 transition-colors flex-shrink-0"
+        >
           <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
-          <p className="text-xs text-amber-300">AI is struggling with this conversation. Consider taking over.</p>
-        </div>
+          <span className="text-xs text-amber-300 flex-1">AI is struggling — tap to take over</span>
+          <UserCheck className="h-3.5 w-3.5 text-amber-400" />
+        </button>
       )}
 
-      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto px-4 py-3">
-        <div className="space-y-3">
-          {messages.map((msg) => {
-            const isVisitor = msg.role === "visitor";
-            const isAgent = msg.role === "agent";
-            const isAi = msg.role === "ai";
-            return (
-              <div key={msg._id} className={cn("flex gap-2", isVisitor ? "justify-start" : "justify-end")}>
-                {isVisitor && (
-                  <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-1">
-                    <User className="h-3 w-3 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="max-w-[70%] min-w-0 space-y-1">
-                  <div className={cn(
-                    "px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words overflow-hidden",
-                    isVisitor
-                      ? "bg-secondary text-foreground rounded-tl-none"
-                      : isAgent
-                      ? "bg-emerald-600 text-white rounded-tr-none"
-                      : "bg-primary/20 text-foreground rounded-tr-none border border-primary/20"
-                  )}>
-                    {msg.content}
-                  </div>
-                  <div className={cn("flex items-center gap-1 px-1", isVisitor ? "justify-start" : "justify-end")}>
-                    {isAi && <Cpu className="h-2.5 w-2.5 text-muted-foreground/60" />}
-                    {isAgent && <Headphones className="h-2.5 w-2.5 text-emerald-500/60" />}
-                    <span className="text-xs text-muted-foreground/50">
-                      {format(new Date(msg.timestamp), "HH:mm")}
-                      {isAgent && msg.agentName && ` · ${msg.agentName}`}
-                      {isAi && msg.aiProvider && ` · ${msg.aiProvider}`}
-                    </span>
-                  </div>
-                </div>
-                {!isVisitor && (
-                  <div className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-1",
-                    isAgent ? "bg-emerald-600/20" : "bg-primary/15"
-                  )}>
-                    {isAgent ? <Headphones className="h-3 w-3 text-emerald-400" /> : <Bot className="h-3 w-3 text-primary" />}
-                  </div>
-                )}
+      {/* ── Messages ── */}
+      <ScrollArea className="flex-1 px-3 md:px-4">
+        <div className="py-3 space-y-4">
+          {grouped.map(({ day, items }) => (
+            <div key={day} className="space-y-2.5">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider">{day}</span>
+                <div className="flex-1 h-px bg-border" />
               </div>
-            );
-          })}
+              {items.map((msg) => {
+                const isVisitor = msg.role === "visitor";
+                const isAgent = msg.role === "agent";
+                return (
+                  <div key={msg._id} className={cn("flex", isVisitor ? "justify-start" : "justify-end")}>
+                    <div className={cn("max-w-[85%] md:max-w-[70%]")}>
+                      <div className={cn(
+                        "px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words",
+                        isVisitor
+                          ? "bg-secondary text-foreground rounded-bl-md"
+                          : isAgent
+                          ? "bg-emerald-600 text-white rounded-br-md"
+                          : "bg-primary/15 text-foreground border border-primary/20 rounded-br-md"
+                      )}>
+                        {msg.content}
+                      </div>
+                      <div className={cn(
+                        "flex items-center gap-1 px-1 mt-0.5",
+                        isVisitor ? "justify-start" : "justify-end"
+                      )}>
+                        {!isVisitor && (
+                          isAgent
+                            ? <Headphones className="h-2.5 w-2.5 text-emerald-500/60" />
+                            : <Bot className="h-2.5 w-2.5 text-primary/50" />
+                        )}
+                        <span className="text-[10px] text-muted-foreground/50">
+                          {format(new Date(msg.timestamp), "HH:mm")}
+                          {isAgent && msg.agentName && ` · ${msg.agentName}`}
+                        </span>
+                        {!isVisitor && <Check className="h-2.5 w-2.5 text-muted-foreground/40" />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
-        <div ref={bottomRef} />
-      </div>
+        <div ref={bottomRef} className="h-1" />
+      </ScrollArea>
 
+      {/* ── Composer ── */}
       {!isClosed && isAgentMode && (
-        <div className="p-3 border-t border-border flex-shrink-0 relative">
+        <div className="p-2.5 md:p-3 border-t border-border flex-shrink-0 relative bg-background pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          {/* Canned dropdown */}
           {slashQuery !== null && filteredCanned.length > 0 && (
-            <div className="absolute bottom-full left-3 right-3 mb-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden z-20">
+            <div className="absolute bottom-full left-2.5 right-2.5 mb-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden z-20">
               <div className="px-3 py-1.5 border-b border-border flex items-center gap-1.5">
                 <Zap className="h-3 w-3 text-primary" />
-                <span className="text-xs text-muted-foreground">
-                  Canned responses · <kbd className="text-[10px] bg-secondary px-1 rounded">↑↓</kbd> navigate · <kbd className="text-[10px] bg-secondary px-1 rounded">Tab</kbd> insert
-                </span>
+                <span className="text-[11px] text-muted-foreground">Quick replies</span>
               </div>
-              {filteredCanned.slice(0, 6).map((r, i) => (
+              {filteredCanned.slice(0, 5).map((r, i) => (
                 <button
                   key={r._id}
                   onClick={() => insertCannedResponse(r.content)}
@@ -279,50 +285,50 @@ export default function ConversationThread({ conversationId }: Props) {
               ))}
             </div>
           )}
-          {slashQuery !== null && filteredCanned.length === 0 && slashQuery.length > 0 && (
-            <div className="absolute bottom-full left-3 right-3 mb-1 bg-popover border border-border rounded-xl shadow-xl px-3 py-2.5 z-20">
-              <p className="text-xs text-muted-foreground">No canned responses matching <span className="text-foreground font-mono">/{slashQuery}</span></p>
-            </div>
-          )}
 
           <div className="flex gap-2 items-end">
-            <div className="flex-1 relative">
-              <Textarea
-                ref={textareaRef}
-                value={text}
-                onChange={handleTextChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your reply… or / for canned responses"
-                className="resize-none text-sm min-h-[60px] max-h-[120px] bg-secondary border-border pr-3"
-                rows={2}
-              />
-            </div>
-            <Button
-              size="sm"
-              onClick={handleSend}
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Reply… ( / for quick replies)"
+              rows={1}
+              className="flex-1 resize-none text-sm bg-secondary border border-border rounded-2xl px-3.5 py-2.5 outline-none focus:border-primary/50 transition-colors leading-relaxed max-h-[120px] text-foreground placeholder:text-muted-foreground/60"
+              style={{ height: "auto" }}
+            />
+            <button
+              onClick={() => void handleSend()}
               disabled={!text.trim() || sending}
-              className="h-10 w-10 p-0 flex-shrink-0"
+              className={cn(
+                "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all cursor-pointer",
+                text.trim() && !sending
+                  ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
+                  : "bg-secondary text-muted-foreground/40"
+              )}
+              aria-label="Send"
             >
-              <Send className="h-4 w-4" />
-            </Button>
+              <Send className="h-4.5 w-4.5" />
+            </button>
           </div>
-          <p className="text-[10px] text-muted-foreground/50 mt-1 px-1">
-            Enter to send · Shift+Enter for new line · / for quick replies
-          </p>
         </div>
       )}
 
+      {/* ── AI handling footer ── */}
       {!isClosed && !isAgentMode && (
-        <div className="p-3 border-t border-border flex-shrink-0">
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-secondary/50 border border-border">
-            <Bot className="h-4 w-4 text-primary flex-shrink-0" />
-            <p className="text-xs text-muted-foreground">AI is handling this conversation. Take over to send messages.</p>
-          </div>
+        <div className="p-2.5 md:p-3 border-t border-border flex-shrink-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={handleTakeOver}
+            className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-secondary/60 border border-border hover:bg-secondary hover:border-primary/30 transition-colors cursor-pointer"
+          >
+            <Bot className="h-4 w-4 text-primary" />
+            <span className="text-sm text-muted-foreground">AI is replying — <span className="text-primary font-medium">tap to take over</span></span>
+          </button>
         </div>
       )}
 
       {isClosed && (
-        <div className="p-3 border-t border-border flex-shrink-0">
+        <div className="p-3 border-t border-border flex-shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <p className="text-xs text-center text-muted-foreground">This conversation is closed</p>
         </div>
       )}
