@@ -29,7 +29,7 @@ export default function SettingsPanel() {
   const deploymentUrl = import.meta.env.VITE_CONVEX_URL as string ?? "";
   const convexUrl = deploymentUrl.replace(".cloud", ".site");
 
-  const snippet = `<!-- NeuralSupport Widget -->
+  const snippet = `<!-- WolvCapital AI Widget -->
 <script>
   window.NeuralSupportConfig = {
     convexUrl: "${convexUrl}",

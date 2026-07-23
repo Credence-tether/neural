@@ -83,7 +83,7 @@ function DashboardInner() {
             <Zap className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <p className="text-sm font-bold text-sidebar-foreground">NeuralSupport</p>
+            <p className="text-sm font-bold text-sidebar-foreground">WolvCapital AI</p>
             <p className="text-xs text-muted-foreground">Agent Dashboard</p>
           </div>
         </div>
@@ -292,7 +292,7 @@ export default function Dashboard() {
               <Zap className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">NeuralSupport</h1>
+              <h1 className="text-2xl font-bold text-foreground mb-2">WolvCapital AI</h1>
               <p className="text-muted-foreground text-sm">Sign in to access the agent dashboard</p>
             </div>
             <SignInButton className="mx-auto" />

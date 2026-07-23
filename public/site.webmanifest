@@ -1,6 +1,6 @@
 {
-  "name": "NeuralSupport",
-  "short_name": "NeuralSupport",
+  "name": "WolvCapital AI",
+  "short_name": "WolvCapital",
   "description": "AI-powered live support platform with smart chat and agent dashboard",
   "start_url": "/",
   "display": "standalone",

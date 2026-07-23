@@ -44,7 +44,7 @@ export default function Index() {
           <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
             <Zap className="h-4 w-4 text-primary" />
           </div>
-          <span className="text-sm font-bold text-foreground">NeuralSupport</span>
+          <span className="text-sm font-bold text-foreground">WolvCapital AI</span>
         </div>
         <Link to="/dashboard">
           <Button size="sm" className="gap-2">

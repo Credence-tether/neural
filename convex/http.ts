@@ -48,7 +48,7 @@ http.route({
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NeuralSupport Widget Test</title>
+  <title>WolvCapital AI Widget Test</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e8eaf0; min-height: 100vh; }
@@ -77,7 +77,7 @@ http.route({
 <body>
 <div class="page">
   <div class="badge">● LIVE TEST</div>
-  <h1>NeuralSupport Widget</h1>
+  <h1>WolvCapital AI Widget</h1>
   <p class="sub">Isolated test page — changes here reflect instantly after <code>npx convex deploy</code></p>
 
   <div class="cards">
@@ -454,7 +454,7 @@ function getWidgetJs(): string {
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
-      <div id="ns-powered">Powered by NeuralSupport AI</div>
+      <div id="ns-powered">Powered by WolvCapital AI</div>
     </div>
     <div id="ns-teaser" role="button" aria-label="Open support chat">
       <span id="ns-teaser-text"></span>
