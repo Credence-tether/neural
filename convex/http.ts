@@ -695,17 +695,20 @@ function getWidgetJs(): string {
     }
   }, 1500);
 
-  // Get geo location — deferred until widget opens to avoid leaking on every page load
+  // Get geo location — deferred until widget opens to avoid leaking on every page load.
+  // ipapi.co's free tier rate-limits hard (429s in normal traffic); ipwho.is has a much
+  // more generous anonymous quota and returns the same shape of data.
   var geoFetched = false;
   function fetchGeoOnce() {
     if (geoFetched) return;
     geoFetched = true;
-    fetch('https://ipapi.co/json/')
+    fetch('https://ipwho.is/')
       .then(function(r) { return r.json(); })
       .then(function(geo) {
+        if (geo.success === false) return;
         convexMutation('visitors:updateVisitorLocation', {
           sessionId: sessionId,
-          country: geo.country_name || geo.country || undefined,
+          country: geo.country || undefined,
           city: geo.city || undefined,
           ip: geo.ip || undefined,
         }).catch(function(){});
