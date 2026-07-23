@@ -335,6 +335,7 @@ function getWidgetJs(): string {
       addMessage({ _id: 'greeting', role: 'ai', content: GREETING });
       if (!visitorName) showIdentityForm();
     }
+    fetchGeoOnce();
     startPolling();
   }
 
@@ -464,17 +465,6 @@ function getWidgetJs(): string {
     siteUrl: SITE_URL,
   }).catch(function(){});
 
-  // Heartbeat: refresh lastSeen every 45s so the dashboard's
-  // 2-minute live window keeps genuinely active visitors visible
-  setInterval(function() {
-    convexMutation('visitors:upsertVisitor', {
-      sessionId: sessionId,
-      currentPage: window.location.href,
-      currentPageTitle: document.title,
-      siteUrl: SITE_URL,
-    }).catch(function(){});
-  }, 45000);
-
   // Track page navigation (SPA-friendly)
   var lastPage = window.location.href;
   setInterval(function() {
@@ -488,24 +478,36 @@ function getWidgetJs(): string {
     }
   }, 1500);
 
-  // Get geo location
-  fetch('https://ipwho.is/').then(function(r) { return r.json(); }).then(function(geo) {
-    convexMutation('visitors:updateVisitorLocation', {
-      sessionId: sessionId,
-      country: geo.country || undefined,
-      city: geo.city || undefined,
-      ip: geo.ip || undefined,
-    }).catch(function(){});
-  }).catch(function(){});
+  // Get geo location — deferred until widget opens to avoid leaking on every page load
+  var geoFetched = false;
+  function fetchGeoOnce() {
+    if (geoFetched) return;
+    geoFetched = true;
+    fetch('https://ip-api.com/json/?fields=country,city,query')
+      .then(function(r) { return r.json(); })
+      .then(function(geo) {
+        convexMutation('visitors:updateVisitorLocation', {
+          sessionId: sessionId,
+          country: geo.country || undefined,
+          city: geo.city || undefined,
+          ip: geo.query || undefined,
+        }).catch(function(){});
+      }).catch(function(){});
+  }
 
-  // Mark offline on page leave
+  // Mark offline on page leave — sendBeacon must use application/json Blob
+  // or Convex rejects with "missing field path" (it ignores text/plain bodies)
   window.addEventListener('beforeunload', function() {
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(CONVEX_URL + '/api/mutation', JSON.stringify({
+      var body = JSON.stringify({
         path: 'visitors:markVisitorOffline',
         args: { sessionId: sessionId },
         format: 'json',
-      }));
+      });
+      navigator.sendBeacon(
+        CONVEX_URL + '/api/mutation',
+        new Blob([body], { type: 'application/json' })
+      );
     }
   });
 
