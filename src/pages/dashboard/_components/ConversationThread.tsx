@@ -216,9 +216,24 @@ export default function ConversationThread({ conversationId }: Props) {
               {items.map((msg) => {
                 const isVisitor = msg.role === "visitor";
                 const isAgent = msg.role === "agent";
+                // saveAiReply tags the final give-up message with "fallback — <error>"
+                // so agents can tell "AI provider is broken" apart from "AI genuinely
+                // doesn't know" instead of seeing the same generic sentence forever.
+                const aiError = !isVisitor && !isAgent && msg.aiProvider?.startsWith("fallback")
+                  ? msg.aiProvider.replace(/^fallback\s*—\s*/, "")
+                  : null;
                 return (
                   <div key={msg._id} className={cn("flex", isVisitor ? "justify-start" : "justify-end")}>
                     <div className={cn("max-w-[85%] md:max-w-[70%]")}>
+                      {aiError && (
+                        <div
+                          title={aiError}
+                          className="mb-1 flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-[10px] text-amber-400"
+                        >
+                          <AlertTriangle className="h-2.5 w-2.5 flex-shrink-0" />
+                          <span className="truncate">AI provider error — check Convex env config</span>
+                        </div>
+                      )}
                       <div className={cn(
                         "px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words",
                         isVisitor

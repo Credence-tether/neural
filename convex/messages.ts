@@ -4,33 +4,31 @@ import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel.d.ts";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
+// Public entrypoint for agent replies only — visitor messages come in through
+// widget:visitorSendMessage and AI replies through the internal aiHelpers
+// mutations, both of which are unauthenticated by design. This one previously
+// had no auth check at all, which let anyone forge an "agent" message into
+// any conversationId.
 export const sendMessage = mutation({
   args: {
     conversationId: v.id("conversations"),
-    role: v.union(v.literal("visitor"), v.literal("ai"), v.literal("agent")),
+    role: v.literal("agent"),
     content: v.string(),
-    aiProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    let agentId: Id<"users"> | undefined = undefined;
-    let agentName: string | undefined = undefined;
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
 
-    if (args.role === "agent") {
-      const userId = await getAuthUserId(ctx);
-      if (userId) {
-        const agent = await ctx.db.get(userId);
-        agentId = userId;
-        agentName = agent?.name;
-      }
-    }
+    const agent = await ctx.db.get(userId);
+    const agentId: Id<"users"> = userId;
+    const agentName: string | undefined = agent?.name;
 
     const msgId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
-      role: args.role,
+      role: "agent",
       content: args.content,
-      agentId: args.role === "agent" ? agentId : undefined,
-      agentName: args.role === "agent" ? agentName : undefined,
-      aiProvider: args.aiProvider,
+      agentId,
+      agentName,
       timestamp: new Date().toISOString(),
     });
 

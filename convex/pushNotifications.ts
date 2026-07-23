@@ -67,8 +67,8 @@ export const sendNotification = internalAction({
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChatId = process.env.TELEGRAM_CHAT_ID;
     if (tgToken && tgChatId) {
-      const text = `\u{1F514} *${args.title.replace(/([_*\[\]()~\`>#+\-=|{}.!])/g, "\\$1")}*` +
-        (args.body ? `\n${args.body.replace(/([_*\[\]()~\`>#+\-=|{}.!])/g, "\\$1")}` : "");
+      const text = `\u{1F514} *${args.title.replace(/([_*[\]()~`>#+\-=|{}.!])/g, "\\$1")}*` +
+        (args.body ? `\n${args.body.replace(/([_*[\]()~`>#+\-=|{}.!])/g, "\\$1")}` : "");
       try {
         await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
           method: "POST",
@@ -108,8 +108,9 @@ export const sendNotification = internalAction({
             payload,
             { urgency: args.urgency ?? "high" }
           );
-        } catch (error: any) {
-          if (error.statusCode === 404 || error.statusCode === 410) {
+        } catch (error) {
+          const statusCode = error instanceof Object && "statusCode" in error ? (error as { statusCode?: number }).statusCode : undefined;
+          if (statusCode === 404 || statusCode === 410) {
             await ctx.runMutation(internal.pushSubscriptions.deleteSubscriptionByEndpoint, {
               endpoint: sub.endpoint,
             });

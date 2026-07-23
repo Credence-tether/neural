@@ -16,16 +16,6 @@ export const getKnowledgeChunks = query({
   },
 });
 
-export const getKnowledgeChunksPublic = query({
-  args: { siteUrl: v.string() },
-  handler: async (ctx, args) => {
-    return ctx.db
-      .query("knowledgeChunks")
-      .withIndex("by_site", (q) => q.eq("siteUrl", normalizeSiteUrl(args.siteUrl)))
-      .collect();
-  },
-});
-
 export const getCrawlJobs = query({
   args: { siteUrl: v.string() },
   handler: async (ctx, args) => {
