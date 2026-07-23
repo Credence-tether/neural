@@ -212,6 +212,7 @@ function getWidgetJs(): string {
   var GREETING = config.greeting || "Hi! How can I help you today? 👋";
   var AGENT_NAME = config.agentName || 'Support';
   var POSITION = config.position || 'right'; // 'right' | 'left'
+  var QUICK_QUESTIONS = Array.isArray(config.quickQuestions) ? config.quickQuestions.slice(0, 4) : [];
 
   if (!CONVEX_URL) {
     console.warn('[NeuralSupport] convexUrl not configured');
@@ -333,15 +334,37 @@ function getWidgetJs(): string {
     .ns-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
     .ns-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes ns-bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
-    #ns-identity-form { padding: 16px; background: rgba(255,255,255,0.04); border-top: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; }
-    #ns-identity-form p { font-size: 12.5px; color: rgba(255,255,255,0.55); margin: 0 0 10px; }
-    .ns-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    #ns-quick-questions { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px 32px; max-width: calc(85% - 32px); }
+    .ns-quick-btn {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+      color: #cdd2e6; border-radius: 16px; padding: 7px 13px; font-size: 12.5px;
+      cursor: pointer; text-align: left; line-height: 1.3; transition: background 0.15s, border-color 0.15s;
+    }
+    .ns-quick-btn:hover { background: rgba(255,255,255,0.12); border-color: \${PRIMARY}; }
+    #ns-identity-form {
+      padding: 16px; background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
+    }
+    #ns-identity-title { font-size: 13.5px; font-weight: 600; color: #e8eaf0; margin: 0 0 3px; }
+    #ns-identity-reason { font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.5); margin: 0 0 12px; }
+    .ns-input-col { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+    .ns-identity-field { display: flex; flex-direction: column; gap: 4px; }
+    .ns-identity-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: rgba(255,255,255,0.4); }
     .ns-identity-input {
-      flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px; padding: 9px 12px; color: #e8eaf0; font-size: 13.5px; outline: none;
+      width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 9px; padding: 10px 12px; color: #e8eaf0; font-size: 14px; outline: none; transition: border-color 0.15s;
     }
     .ns-identity-input:focus { border-color: \${PRIMARY}; }
     .ns-identity-input::placeholder { color: rgba(255,255,255,0.3); }
+    .ns-identity-actions { display: flex; gap: 10px; align-items: center; }
+    #ns-identity-save {
+      flex: 1; background: \${PRIMARY}; color: white; border: none; border-radius: 9px;
+      padding: 9px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    #ns-identity-save:hover { opacity: 0.9; }
+    #ns-identity-skip {
+      font-size: 12.5px; background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; padding: 9px 4px;
+    }
+    #ns-identity-skip:hover { color: rgba(255,255,255,0.65); }
     #ns-input-area {
       padding: 12px 12px 14px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 8px; flex-shrink: 0;
       background: rgba(0,0,0,0.2);
@@ -408,12 +431,22 @@ function getWidgetJs(): string {
       </div>
       <div id="ns-messages"></div>
       <div id="ns-identity-form" style="display:none">
-        <p>Help us personalize your support (optional)</p>
-        <div class="ns-input-row">
-          <input id="ns-name-inp" class="ns-identity-input" placeholder="Your name" value="">
-          <input id="ns-email-inp" class="ns-identity-input" placeholder="Email address" value="">
+        <p id="ns-identity-title">Before we continue</p>
+        <p id="ns-identity-reason">Leave your email so we can follow up if you get disconnected or a specialist needs to reach you — we'll never use it for anything else.</p>
+        <div class="ns-input-col">
+          <div class="ns-identity-field">
+            <label class="ns-identity-label" for="ns-name-inp">Name</label>
+            <input id="ns-name-inp" class="ns-identity-input" placeholder="Jane Doe" value="" autocomplete="name">
+          </div>
+          <div class="ns-identity-field">
+            <label class="ns-identity-label" for="ns-email-inp">Email</label>
+            <input id="ns-email-inp" class="ns-identity-input" type="email" placeholder="you@example.com" value="" autocomplete="email">
+          </div>
         </div>
-        <button id="ns-identity-skip" style="font-size:11px;background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;padding:0">Skip</button>
+        <div class="ns-identity-actions">
+          <button id="ns-identity-save">Save</button>
+          <button id="ns-identity-skip">Not now</button>
+        </div>
       </div>
       <div id="ns-input-area">
         <textarea id="ns-input" placeholder="Type a message..." rows="1" aria-label="Message input"></textarea>
@@ -550,6 +583,7 @@ function getWidgetJs(): string {
     $input.focus();
     if (messages.length === 0) {
       addMessage({ _id: 'greeting', role: 'ai', content: GREETING });
+      renderQuickQuestions();
       if (!visitorName) showIdentityForm();
     }
     fetchGeoOnce();
@@ -585,8 +619,35 @@ function getWidgetJs(): string {
       updateVisitorInfo();
     }
 
+    document.getElementById('ns-identity-save').onclick = saveIdentity;
     document.getElementById('ns-identity-skip').onclick = function() { $identityForm.style.display = 'none'; };
     nameInp.onkeydown = emailInp.onkeydown = function(e) { if (e.key === 'Enter') saveIdentity(); };
+  }
+
+  // ── Quick-tap starter questions ─────────────────────────────────────────────
+  function renderQuickQuestions() {
+    if (!QUICK_QUESTIONS.length || document.getElementById('ns-quick-questions')) return;
+    var wrap = document.createElement('div');
+    wrap.id = 'ns-quick-questions';
+    QUICK_QUESTIONS.forEach(function(q) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ns-quick-btn';
+      btn.textContent = q;
+      btn.addEventListener('click', function() {
+        removeQuickQuestions();
+        $input.value = q;
+        sendMessage();
+      });
+      wrap.appendChild(btn);
+    });
+    $messages.appendChild(wrap);
+    scrollToBottom();
+  }
+
+  function removeQuickQuestions() {
+    var wrap = document.getElementById('ns-quick-questions');
+    if (wrap) wrap.remove();
   }
 
   function updateVisitorInfo() {
@@ -605,6 +666,7 @@ function getWidgetJs(): string {
     if (!content) return;
     $input.value = '';
     $input.style.height = '';
+    removeQuickQuestions();
 
     addMessage({ tempId: 'tmp_' + Date.now(), role: 'visitor', content: content });
     showTyping();

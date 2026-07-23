@@ -37,6 +37,11 @@ export default function SettingsPanel() {
     primaryColor: "#6366f1",
     greeting: "Hi! How can I help you today?",
     agentName: "Support",
+    // Up to 4 tap-to-send starter questions shown under the greeting
+    quickQuestions: [
+      "What can you help me with?",
+      "I want to speak to a human",
+    ],
   };
 </script>
 <script src="${convexUrl}/widget.js" async></script>`;
