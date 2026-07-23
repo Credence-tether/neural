@@ -37,6 +37,161 @@ http.route({
   }),
 });
 
+// ── Standalone widget test page ───────────────────────────────────────────────
+http.route({
+  path: "/test",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const convexUrl = req.url.replace(/\/test$/, "").replace(".convex.site", ".convex.cloud");
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuralSupport Widget Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e8eaf0; min-height: 100vh; }
+    .page { max-width: 860px; margin: 0 auto; padding: 48px 24px; }
+    .badge { display: inline-block; background: #22c55e22; color: #4ade80; border: 1px solid #22c55e44; border-radius: 20px; font-size: 12px; font-weight: 600; padding: 4px 12px; letter-spacing: 0.05em; margin-bottom: 24px; }
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .sub { color: rgba(255,255,255,0.45); font-size: 15px; margin-bottom: 40px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 40px; }
+    .card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; }
+    .card h3 { font-size: 13px; color: rgba(255,255,255,0.4); font-weight: 500; margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .card p { font-size: 14px; color: #e8eaf0; word-break: break-all; }
+    .prompts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; }
+    .prompt-btn {
+      background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+      color: #a5b4fc; border-radius: 20px; padding: 7px 16px; font-size: 13px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .prompt-btn:hover { background: rgba(99,102,241,0.25); }
+    .log-box { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.7; max-height: 220px; overflow-y: auto; color: rgba(255,255,255,0.6); }
+    .log-box .ok { color: #4ade80; }
+    .log-box .err { color: #f87171; }
+    .log-box .info { color: #818cf8; }
+    .tip { margin-top: 32px; background: rgba(251,191,36,0.07); border: 1px solid rgba(251,191,36,0.2); border-radius: 10px; padding: 14px 18px; font-size: 13px; color: rgba(251,191,36,0.8); }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="badge">● LIVE TEST</div>
+  <h1>NeuralSupport Widget</h1>
+  <p class="sub">Isolated test page — changes here reflect instantly after <code>npx convex deploy</code></p>
+
+  <div class="cards">
+    <div class="card"><h3>Convex URL</h3><p id="c-url">—</p></div>
+    <div class="card"><h3>Site URL</h3><p id="c-site">—</p></div>
+    <div class="card"><h3>Session ID</h3><p id="c-session">—</p></div>
+    <div class="card"><h3>Widget Status</h3><p id="c-status">Loading…</p></div>
+  </div>
+
+  <p style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px;">Quick-fire test prompts →</p>
+  <div class="prompts">
+    <button class="prompt-btn" onclick="injectMsg('What investment plans do you offer?')">Investment plans</button>
+    <button class="prompt-btn" onclick="injectMsg('Tell me about the Horizon plan')">Horizon plan</button>
+    <button class="prompt-btn" onclick="injectMsg('How does WalletConnect work?')">WalletConnect</button>
+    <button class="prompt-btn" onclick="injectMsg('What is the WOLV token?')">WOLV token</button>
+    <button class="prompt-btn" onclick="injectMsg('stability')">stability (one word)</button>
+    <button class="prompt-btn" onclick="injectMsg('your roadmap')">roadmap</button>
+    <button class="prompt-btn" onclick="injectMsg('wallet connect')">wallet connect</button>
+    <button class="prompt-btn" onclick="injectMsg('How do I withdraw?')">Withdraw</button>
+  </div>
+
+  <p style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:10px;">Console log</p>
+  <div class="log-box" id="log">Waiting for widget events…<br></div>
+
+  <div class="tip">💡 The widget bubble is in the bottom-right corner. Click it to open, or use the prompt buttons above to fire messages directly.</div>
+</div>
+
+<script>
+  var CONVEX_URL = '${convexUrl}';
+  var SITE_URL = window.location.origin;
+
+  document.getElementById('c-url').textContent = CONVEX_URL;
+  document.getElementById('c-site').textContent = SITE_URL;
+
+  function log(msg, cls) {
+    var box = document.getElementById('log');
+    var line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // Intercept fetch to log Convex calls
+  var _fetch = window.fetch;
+  window.fetch = function(url, opts) {
+    if (url && String(url).includes('convex.cloud')) {
+      var body = opts && opts.body ? JSON.parse(opts.body) : {};
+      log('→ ' + (body.path || url), 'info');
+      return _fetch.apply(this, arguments).then(function(r) {
+        var status = r.status;
+        var clone = r.clone();
+        clone.json().then(function(d) {
+          if (d.status === 'error' || d.errorMessage) {
+            log('✗ ' + (d.errorMessage || JSON.stringify(d)).slice(0, 120), 'err');
+            document.getElementById('c-status').textContent = '❌ Error — see log';
+          } else {
+            log('✓ ' + (body.path || '').split(':')[1] + ' 200', 'ok');
+            document.getElementById('c-status').textContent = '✅ Connected';
+          }
+        }).catch(function(){});
+        return r;
+      });
+    }
+    return _fetch.apply(this, arguments);
+  };
+
+  // Inject a message directly into the open widget input
+  function injectMsg(text) {
+    var inp = document.getElementById('ns-input');
+    var send = document.getElementById('ns-send');
+    var win = document.getElementById('ns-window');
+    if (!inp) { log('Widget not loaded yet', 'err'); return; }
+    if (!win.classList.contains('ns-open')) {
+      document.getElementById('ns-bubble').click();
+      setTimeout(function() { injectMsg(text); }, 350);
+      return;
+    }
+    inp.value = text;
+    inp.dispatchEvent(new Event('input'));
+    send.click();
+    log('Sent: ' + text, 'info');
+  }
+
+  // Load the widget
+  window.NeuralSupportConfig = {
+    convexUrl: CONVEX_URL,
+    siteUrl: 'wolvcapital.com',
+    agentName: 'Alex',
+    greeting: 'Hi! Ask me anything about WolvCapital 👋',
+    primaryColor: '#6366f1',
+  };
+
+  var s = document.createElement('script');
+  s.src = window.location.origin.replace('.convex.cloud', '.convex.site') + '/widget.js';
+  s.onload = function() {
+    document.getElementById('c-session').textContent =
+      localStorage.getItem('ns_session_wolvcapital.com') || '(opens on first chat)';
+    log('widget.js loaded ✓', 'ok');
+  };
+  s.onerror = function() { log('widget.js failed to load', 'err'); };
+  document.body.appendChild(s);
+</script>
+</body>
+</html>`;
+    return new Response(html, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    });
+  }),
+});
+
 export default http;
 
 // ── Widget JS (self-contained, no dependencies) ───────────────────────────────
@@ -483,14 +638,14 @@ function getWidgetJs(): string {
   function fetchGeoOnce() {
     if (geoFetched) return;
     geoFetched = true;
-    fetch('https://ip-api.com/json/?fields=country,city,query')
+    fetch('https://ipapi.co/json/')
       .then(function(r) { return r.json(); })
       .then(function(geo) {
         convexMutation('visitors:updateVisitorLocation', {
           sessionId: sessionId,
-          country: geo.country || undefined,
+          country: geo.country_name || geo.country || undefined,
           city: geo.city || undefined,
-          ip: geo.query || undefined,
+          ip: geo.ip || undefined,
         }).catch(function(){});
       }).catch(function(){});
   }
