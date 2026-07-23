@@ -364,6 +364,30 @@ function getWidgetJs(): string {
     @media (max-width: 420px) {
       #ns-window { width: calc(100vw - 16px) !important; left: 8px !important; right: 8px !important; height: calc(100vh - 90px) !important; }
     }
+    #ns-bubble.ns-pulse::before {
+      content: ''; position: absolute; inset: -6px; border-radius: 50%;
+      border: 2px solid \${PRIMARY}; opacity: 0; animation: ns-pulse-ring 2.4s ease-out 3;
+    }
+    @keyframes ns-pulse-ring {
+      0% { transform: scale(0.85); opacity: 0.55; }
+      70% { transform: scale(1.4); opacity: 0; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    #ns-teaser {
+      position: fixed; \${POSITION === 'left' ? 'left: 16px' : 'right: 16px'}; bottom: 84px;
+      max-width: 236px; background: #1a1c2e; color: #e8eaf0; border-radius: 14px 14px \${POSITION === 'left' ? '14px 4px' : '4px 14px'};
+      padding: 12px 34px 12px 14px; font-size: 13.5px; line-height: 1.5;
+      box-shadow: 0 10px 34px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06);
+      display: none; cursor: pointer; z-index: 2147483646;
+      animation: ns-teaser-in 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    #ns-teaser.ns-show { display: block; }
+    @keyframes ns-teaser-in { from { opacity: 0; transform: translateY(8px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    #ns-teaser-close {
+      position: absolute; top: 6px; right: 6px; background: none; border: none;
+      color: rgba(255,255,255,0.35); cursor: pointer; padding: 4px; line-height: 0;
+    }
+    #ns-teaser-close:hover { color: rgba(255,255,255,0.75); }
   \`;
   document.head.appendChild(style);
 
@@ -399,6 +423,12 @@ function getWidgetJs(): string {
       </div>
       <div id="ns-powered">Powered by NeuralSupport AI</div>
     </div>
+    <div id="ns-teaser" role="button" aria-label="Open support chat">
+      <span id="ns-teaser-text"></span>
+      <button id="ns-teaser-close" aria-label="Dismiss">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
     <button id="ns-bubble" aria-label="Open support chat">
       <div id="ns-badge"></div>
       <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -413,6 +443,37 @@ function getWidgetJs(): string {
   var $send = document.getElementById('ns-send');
   var $badge = document.getElementById('ns-badge');
   var $identityForm = document.getElementById('ns-identity-form');
+  var $teaser = document.getElementById('ns-teaser');
+  var $teaserText = document.getElementById('ns-teaser-text');
+
+  // ── Proactive teaser bubble ─────────────────────────────────────────────────
+  // Signals that support exists before the visitor ever clicks the bubble —
+  // a pulse ring plus a one-time greeting popup, same pattern Intercom/Crisp use.
+  var TEASER_KEY = 'ns_teaser_dismissed_' + SITE_URL;
+
+  function dismissTeaser() {
+    $teaser.classList.remove('ns-show');
+    $bubble.classList.remove('ns-pulse');
+    localStorage.setItem(TEASER_KEY, '1');
+  }
+
+  if (!localStorage.getItem(TEASER_KEY)) {
+    $bubble.classList.add('ns-pulse');
+    setTimeout(function() {
+      if (isOpen) return;
+      $teaserText.textContent = GREETING;
+      $teaser.classList.add('ns-show');
+    }, 4000);
+  }
+
+  $teaser.addEventListener('click', function() {
+    dismissTeaser();
+    openWidget();
+  });
+  document.getElementById('ns-teaser-close').addEventListener('click', function(e) {
+    e.stopPropagation();
+    dismissTeaser();
+  });
 
   // ── Render a message ────────────────────────────────────────────────────────
   function renderMsg(msg) {
@@ -482,6 +543,7 @@ function getWidgetJs(): string {
   // ── Open / close ────────────────────────────────────────────────────────────
   function openWidget() {
     isOpen = true;
+    dismissTeaser();
     $window.style.display = 'flex';
     requestAnimationFrame(function() { $window.classList.add('ns-open'); });
     $badge.style.display = 'none';
