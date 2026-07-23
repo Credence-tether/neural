@@ -22,7 +22,7 @@ import type * as pushSubscriptions from "../pushSubscriptions.js";
 import type * as siteUrl from "../siteUrl.js";
 import type * as users from "../users.js";
 import type * as visitors from "../visitors.js";
-import type * as widge from "../widge.js";
+import type * as widget from "../widget.js";
 
 import type {
   ApiFromModules,
@@ -45,7 +45,7 @@ declare const fullApi: ApiFromModules<{
   siteUrl: typeof siteUrl;
   users: typeof users;
   visitors: typeof visitors;
-  widge: typeof widge;
+  widget: typeof widget;
 }>;
 
 /**
