@@ -2,7 +2,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { cn } from "@/lib/utils.ts";
+import { cn, countryFlagEmoji } from "@/lib/utils.ts";
 import {
   MessageSquare, Bot, UserCheck, ArrowRightLeft,
   Clock, TrendingUp, Globe, Users,
@@ -274,12 +274,15 @@ export default function AnalyticsPanel() {
               <p className="text-xs text-muted-foreground">No geo data yet</p>
             ) : (
               <div className="space-y-2">
-                {data.topCountries.slice(0, 5).map(({ country, count }) => {
+                {data.topCountries.slice(0, 5).map(({ country, count, countryCode }) => {
                   const max = data.topCountries[0]?.count ?? 1;
                   return (
                     <div key={country}>
                       <div className="flex justify-between mb-0.5">
-                        <span className="text-[11px] text-muted-foreground truncate">{country}</span>
+                        <span className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+                          {countryFlagEmoji(countryCode) && <span>{countryFlagEmoji(countryCode)}</span>}
+                          {country}
+                        </span>
                         <span className="text-[11px] font-medium text-foreground ml-2">{count}</span>
                       </div>
                       <div className="h-1 rounded-full bg-muted overflow-hidden">

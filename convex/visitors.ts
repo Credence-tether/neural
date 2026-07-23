@@ -54,6 +54,7 @@ export const updateVisitorLocation = mutation({
   args: {
     sessionId: v.string(),
     country: v.optional(v.string()),
+    countryCode: v.optional(v.string()),
     city: v.optional(v.string()),
     ip: v.optional(v.string()),
   },
@@ -66,6 +67,7 @@ export const updateVisitorLocation = mutation({
     if (visitor) {
       await ctx.db.patch(visitor._id, {
         country: args.country,
+        countryCode: args.countryCode,
         city: args.city,
         ip: args.ip,
       });

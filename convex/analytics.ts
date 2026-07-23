@@ -14,7 +14,7 @@ export const getAnalytics = query({
     handoffCount: number;
     avgResponseTimeMs: number;
     volumeByDay: { date: string; count: number }[];
-    topCountries: { country: string; count: number }[];
+    topCountries: { country: string; count: number; countryCode?: string }[];
     busyHours: { hour: number; count: number }[];
     statusBreakdown: { status: string; count: number }[];
     resolvedToday: number;
@@ -78,15 +78,19 @@ export const getAnalytics = query({
     // Top countries from visitors
     const visitorIds = [...new Set(allConversations.map((c) => c.visitorId))];
     const countryMap = new Map<string, number>();
+    const countryCodeByName = new Map<string, string>();
     // Fetch visitors in small batches to avoid N+1
     const visitors = await Promise.all(visitorIds.slice(0, 200).map((id) => ctx.db.get(id)));
     for (const v of visitors) {
       if (v?.country) {
         countryMap.set(v.country, (countryMap.get(v.country) ?? 0) + 1);
+        if (v.countryCode && !countryCodeByName.has(v.country)) {
+          countryCodeByName.set(v.country, v.countryCode);
+        }
       }
     }
     const topCountries = Array.from(countryMap.entries())
-      .map(([country, count]) => ({ country, count }))
+      .map(([country, count]) => ({ country, count, countryCode: countryCodeByName.get(country) }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 8);
 

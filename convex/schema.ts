@@ -20,6 +20,7 @@ export default defineSchema({
     name: v.optional(v.string()),
     email: v.optional(v.string()),
     country: v.optional(v.string()),
+    countryCode: v.optional(v.string()), // ISO 3166-1 alpha-2, e.g. "US" — renders as a flag in the dashboard
     city: v.optional(v.string()),
     ip: v.optional(v.string()),
     currentPage: v.optional(v.string()),

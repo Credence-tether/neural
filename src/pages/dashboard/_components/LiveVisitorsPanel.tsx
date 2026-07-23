@@ -3,6 +3,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { MapPin, Navigation, User, ArrowLeft } from "lucide-react";
+import { countryFlagEmoji } from "@/lib/utils.ts";
 import VisitorDetailCard from "./VisitorDetailCard.tsx";
 
 type Props = {
@@ -111,6 +112,9 @@ export default function LiveVisitorsPanel({ onSelect }: Props = {}) {
                     <div className="flex items-center gap-1 mt-0.5">
                       <MapPin className="h-2.5 w-2.5 text-muted-foreground/40 flex-shrink-0" />
                       <p className="text-[11px] text-muted-foreground/50 truncate">
+                        {countryFlagEmoji(v.countryCode) && (
+                          <span className="mr-1">{countryFlagEmoji(v.countryCode)}</span>
+                        )}
                         {[v.city, v.country].filter(Boolean).join(", ")}
                       </p>
                     </div>

@@ -4,6 +4,7 @@ import {
   MapPin, Monitor, Globe, Clock, Navigation, User, Mail,
 } from "lucide-react";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import { countryFlagEmoji } from "@/lib/utils.ts";
 
 type Props = {
   visitor: Doc<"visitors">;
@@ -50,7 +51,10 @@ export default function VisitorDetailCard({ visitor, pageViews }: Props) {
             {(visitor.city || visitor.country) && (
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="text-foreground">
+                <span className="text-foreground flex items-center gap-1.5">
+                  {countryFlagEmoji(visitor.countryCode) && (
+                    <span className="text-base leading-none">{countryFlagEmoji(visitor.countryCode)}</span>
+                  )}
                   {[visitor.city, visitor.country].filter(Boolean).join(", ")}
                 </span>
               </div>

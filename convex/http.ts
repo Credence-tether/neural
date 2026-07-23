@@ -771,6 +771,7 @@ function getWidgetJs(): string {
         convexMutation('visitors:updateVisitorLocation', {
           sessionId: sessionId,
           country: geo.country || undefined,
+          countryCode: geo.country_code || undefined,
           city: geo.city || undefined,
           ip: geo.ip || undefined,
         }).catch(function(){});
