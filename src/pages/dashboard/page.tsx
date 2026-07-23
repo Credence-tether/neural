@@ -1,9 +1,13 @@
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import AnalyticsPanel from "./_components/AnalyticsPanel.tsx";
 import ConversationList from "./_components/ConversationList.tsx";
@@ -12,306 +16,263 @@ import VisitorPanel from "./_components/VisitorPanel.tsx";
 import LiveVisitorsPanel from "./_components/LiveVisitorsPanel.tsx";
 import KnowledgeBasePanel from "./_components/KnowledgeBasePanel.tsx";
 import SettingsPanel from "./_components/SettingsPanel.tsx";
+import WidgetPreviewPanel from "./_components/WidgetPreviewPanel.tsx";
 import { usePushNotifications } from "@/hooks/use-push-notifications.ts";
+import VisitorDetailCard from "./_components/VisitorDetailCard.tsx";
 import { useConvexAuth } from "convex/react";
 import { cn } from "@/lib/utils.ts";
 import {
   MessageSquare, Users, Database, Settings, Bell, BellOff, Zap,
-  LogOut, BarChart2, ChevronLeft, Info, Circle,
+  LogOut, BarChart2, ArrowLeft, Info, Eye,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { toast } from "sonner";
 
-type View = "inbox" | "visitors" | "analytics" | "knowledge" | "settings";
-type MobileLayer = "nav" | "thread" | "details";
-
-/**
- * Browser-history trap:
- * We push a sentinel state on mount and re-push whenever the user goes "deeper"
- * (opens a thread / details). popstate then unwinds our internal layers instead
- * of leaving the dashboard. The agent can never accidentally swipe out of the app.
- */
-function useBackTrap(layer: MobileLayer, goBack: () => boolean) {
-  const goBackRef = useRef(goBack);
-  goBackRef.current = goBack;
-
-  useEffect(() => {
-    // Seed two entries so there's always something to pop without exiting
-    history.pushState({ ns: true }, "");
-    const onPop = (e: PopStateEvent) => {
-      const handled = goBackRef.current();
-      // Always re-arm the trap so the next back press is also intercepted
-      history.pushState({ ns: true }, "");
-      if (!handled) {
-        // Already at root — swallow the event silently (stay in dashboard)
-      }
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
-}
-
-/** Plays a short notification chime using WebAudio (no asset needed). */
-function useChime() {
-  const ctxRef = useRef<AudioContext | null>(null);
-  return useCallback(() => {
-    try {
-      ctxRef.current ??= new AudioContext();
-      const ctx = ctxRef.current;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.setValueAtTime(880, ctx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-      o.connect(g).connect(ctx.destination);
-      o.start();
-      o.stop(ctx.currentTime + 0.4);
-    } catch { /* audio blocked until first gesture — fine */ }
-  }, []);
-}
+type MobilePanel = "sidebar" | "thread" | "details";
 
 function DashboardInner() {
-  const [view, setView] = useState<View>("inbox");
   const [selectedConvo, setSelectedConvo] = useState<Id<"conversations"> | null>(null);
   const [selectedVisitorId, setSelectedVisitorId] = useState<Id<"visitors"> | null>(null);
-  const [layer, setLayer] = useState<MobileLayer>("nav");
+  const [sidebarTab, setSidebarTab] = useState<"conversations" | "visitors" | "analytics" | "knowledge" | "settings" | "preview">("conversations");
+  const [rightPanel, setRightPanel] = useState<"visitor" | "live">("visitor");
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("sidebar");
   const { isAuthenticated } = useConvexAuth();
   const { status, subscribe, unsubscribe } = usePushNotifications(isAuthenticated);
   const { signOut } = useAuth();
   const currentUser = useQuery(api.users.getCurrentUser);
   const allConvos = useQuery(api.conversations.getAllConversations);
-  const chime = useChime();
-
   const openCount = allConvos?.filter(c => c.status !== "closed").length ?? 0;
-  const urgentCount = allConvos?.filter(c => c.aiStruggling && c.status !== "closed").length ?? 0;
+  const strugglingCount = allConvos?.filter(c => c.aiStruggling).length ?? 0;
 
-  // ── New-message chime: watch the newest lastMessageAt across conversations ──
-  const lastSeenRef = useRef<number>(Date.now());
-  useEffect(() => {
-    if (!allConvos) return;
-    const newest = Math.max(...allConvos.map(c => new Date(c.lastMessageAt ?? 0).getTime()), 0);
-    if (newest > lastSeenRef.current) {
-      lastSeenRef.current = newest;
-      chime();
+  const handleTogglePush = async () => {
+    if (status === "subscribed") {
+      await unsubscribe();
+      toast("Push notifications disabled");
+    } else if (status === "unsubscribed") {
+      await subscribe();
+    } else if (status === "iframe") {
+      toast.info("Push notifications can only be tested after publishing");
+    } else if (status === "denied") {
+      toast.error("Notifications blocked. Enable in browser settings then refresh.");
     }
-  }, [allConvos, chime]);
+  };
 
-  // ── Back-gesture trap: unwind layers, never exit ──
-  const handleInternalBack = useCallback((): boolean => {
-    if (layer === "details") { setLayer("thread"); return true; }
-    if (layer === "thread") { setLayer("nav"); return true; }
-    return false; // at root — stay put
-  }, [layer]);
-  useBackTrap(layer, handleInternalBack);
-
-  const openConversation = (id: Id<"conversations">) => {
+  const handleSelectConvo = (id: Id<"conversations">) => {
     setSelectedConvo(id);
     setSelectedVisitorId(null);
-    setLayer("thread");
-    history.pushState({ ns: true }, "");
+    setMobilePanel("thread");
   };
 
-  const openVisitor = (id: Id<"visitors">) => {
+  const handleSelectVisitor = (id: Id<"visitors">) => {
     setSelectedVisitorId(id);
-    setLayer("details");
-    history.pushState({ ns: true }, "");
+    setRightPanel("visitor");
   };
-
-  const openDetails = () => {
-    setLayer("details");
-    history.pushState({ ns: true }, "");
-  };
-
-  const navItems = [
-    { id: "inbox" as View, icon: MessageSquare, label: "Inbox", count: openCount, urgent: urgentCount },
-    { id: "visitors" as View, icon: Users, label: "Visitors" },
-    { id: "analytics" as View, icon: BarChart2, label: "Analytics" },
-    { id: "knowledge" as View, icon: Database, label: "Knowledge" },
-    { id: "settings" as View, icon: Settings, label: "Settings" },
-  ];
-
-  const showList = view === "inbox";
 
   return (
-    <div className="flex h-dvh bg-background overflow-hidden">
-
-      {/* ══ Rail (desktop) / Bottom bar (mobile) ══ */}
-      <nav className={cn(
-        // Mobile: fixed bottom tab bar
-        "fixed bottom-0 inset-x-0 z-40 flex border-t border-border bg-background/95 backdrop-blur",
-        "pb-[env(safe-area-inset-bottom)]",
-        // Desktop: left vertical rail
-        "md:relative md:flex-col md:w-16 md:border-t-0 md:border-r md:pb-0 md:bg-sidebar",
-        // Hide bottom bar when inside a thread on mobile (full-screen chat)
-        layer !== "nav" && "hidden md:flex"
-      )}>
-        <div className="hidden md:flex items-center justify-center py-4">
-          <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
-            <Zap className="h-4.5 w-4.5 text-primary" />
+    <div className="flex h-screen bg-background overflow-hidden">
+      {/* Sidebar */}
+      <div
+        className={cn(
+          "w-full md:w-64 flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border",
+          mobilePanel === "sidebar" ? "flex" : "hidden md:flex"
+        )}
+      >
+        {/* Logo */}
+        <div className="px-4 py-4 flex items-center gap-2.5 border-b border-sidebar-border">
+          <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+            <Zap className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-sidebar-foreground">NeuralSupport</p>
+            <p className="text-xs text-muted-foreground">Agent Dashboard</p>
           </div>
         </div>
 
-        <div className="flex flex-1 md:flex-col md:gap-1 md:px-2">
-          {navItems.map(({ id, icon: Icon, label, count, urgent }) => (
+        {/* Nav tabs */}
+        <div className="p-2 space-y-0.5 border-b border-sidebar-border">
+          {[
+            { id: "conversations" as const, icon: MessageSquare, label: "Conversations", badge: openCount > 0 ? openCount : undefined },
+            { id: "visitors" as const, icon: Users, label: "Live Visitors" },
+            { id: "analytics" as const, icon: BarChart2, label: "Analytics" },
+            { id: "knowledge" as const, icon: Database, label: "Knowledge Base" },
+            { id: "settings" as const, icon: Settings, label: "Settings & Widget" },
+            { id: "preview" as const, icon: Eye, label: "Widget Preview" },
+          ].map(({ id, icon: Icon, label, badge }) => (
             <button
               key={id}
-              onClick={() => { setView(id); setLayer("nav"); }}
+              onClick={() => setSidebarTab(id)}
               className={cn(
-                "relative flex-1 md:flex-none flex flex-col items-center justify-center gap-0.5 py-2 md:py-2.5 md:rounded-xl transition-colors cursor-pointer",
-                view === id
-                  ? "text-primary md:bg-primary/12"
-                  : "text-muted-foreground hover:text-foreground md:hover:bg-sidebar-accent"
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all cursor-pointer text-sm",
+                sidebarTab === id
+                  ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               )}
             >
-              <Icon className="h-5 w-5" />
-              <span className="text-[10px] font-medium md:hidden">{label}</span>
-              {count !== undefined && count > 0 && (
+              <Icon className="h-4 w-4 flex-shrink-0" />
+              <span className="flex-1">{label}</span>
+              {badge !== undefined && (
                 <span className={cn(
-                  "absolute top-1 right-[calc(50%-16px)] md:top-1 md:right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center",
-                  urgent && urgent > 0 ? "bg-amber-500 text-black" : "bg-primary text-primary-foreground"
+                  "text-xs px-1.5 py-0.5 rounded-full font-medium",
+                  strugglingCount > 0
+                    ? "bg-amber-500/20 text-amber-400"
+                    : "bg-primary/20 text-primary"
                 )}>
-                  {count > 99 ? "99+" : count}
+                  {badge}
                 </span>
               )}
             </button>
           ))}
         </div>
 
-        {/* Desktop rail footer */}
-        <div className="hidden md:flex flex-col items-center gap-2 py-3">
-          <button
-            onClick={() => void (status === "subscribed" ? unsubscribe() : subscribe())}
-            title="Notifications"
-            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer"
-          >
-            {status === "subscribed"
-              ? <Bell className="h-4 w-4 text-primary" />
-              : <BellOff className="h-4 w-4 text-muted-foreground" />}
-          </button>
-          <button
-            onClick={() => void signOut()}
-            title="Sign out"
-            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer"
-          >
-            <LogOut className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center" title={currentUser?.name ?? "Agent"}>
-            <span className="text-xs font-bold text-primary">{currentUser?.name?.[0]?.toUpperCase() ?? "A"}</span>
+        {/* Sidebar content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {sidebarTab === "conversations" && (
+            <ConversationList selectedId={selectedConvo} onSelect={handleSelectConvo} />
+          )}
+          {sidebarTab === "visitors" && <LiveVisitorsPanel />}
+          {sidebarTab === "analytics" && <AnalyticsPanel />}
+          {sidebarTab === "knowledge" && <KnowledgeBasePanel />}
+          {sidebarTab === "settings" && <SettingsPanel />}
+          {sidebarTab === "preview" && <WidgetPreviewPanel />}
+        </div>
+
+        {/* Agent info */}
+        <div className="p-3 border-t border-sidebar-border">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-medium text-primary">
+                {currentUser?.name?.[0]?.toUpperCase() ?? "A"}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-sidebar-foreground truncate">{currentUser?.name ?? "Agent"}</p>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-xs text-muted-foreground">Online</span>
+              </div>
+            </div>
+            <button
+              onClick={handleTogglePush}
+              title={status === "subscribed" ? "Disable notifications" : "Enable notifications"}
+              className="p-1.5 rounded hover:bg-sidebar-accent transition-colors cursor-pointer"
+            >
+              {status === "subscribed" ? (
+                <Bell className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <BellOff className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </button>
+            <button
+              onClick={() => void signOut()}
+              title="Sign out"
+              className="p-1.5 rounded hover:bg-sidebar-accent transition-colors cursor-pointer"
+            >
+              <LogOut className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
           </div>
         </div>
-      </nav>
+      </div>
 
-      {/* ══ List column ══ */}
-      <section className={cn(
-        "flex-col min-w-0 border-r border-border",
-        "w-full md:w-80 md:flex-shrink-0",
-        // Mobile: only visible at nav layer
-        layer === "nav" ? "flex pb-14 md:pb-0" : "hidden md:flex"
-      )}>
-        {/* Column header */}
-        <header className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
-          <h1 className="text-base font-bold text-foreground capitalize flex-1">{view === "inbox" ? "Inbox" : view}</h1>
-          {view === "inbox" && urgentCount > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium">
-              {urgentCount} need help
-            </span>
-          )}
-          {/* Mobile-only quick actions */}
-          <button
-            onClick={() => void (status === "subscribed" ? unsubscribe() : subscribe())}
-            className="md:hidden p-1.5 rounded hover:bg-secondary transition-colors"
-          >
-            {status === "subscribed"
-              ? <Bell className="h-4 w-4 text-primary" />
-              : <BellOff className="h-4 w-4 text-muted-foreground" />}
-          </button>
-          <button onClick={() => void signOut()} className="md:hidden p-1.5 rounded hover:bg-secondary transition-colors">
-            <LogOut className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </header>
-
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {view === "inbox" && (
-            <ConversationList selectedId={selectedConvo} onSelect={openConversation} />
-          )}
-          {view === "visitors" && <LiveVisitorsPanel onSelect={openVisitor} />}
-          {view === "analytics" && <AnalyticsPanel />}
-          {view === "knowledge" && <KnowledgeBasePanel />}
-          {view === "settings" && <SettingsPanel />}
-        </div>
-      </section>
-
-      {/* ══ Thread column ══ */}
-      <main className={cn(
-        "flex-1 flex-col min-w-0",
-        layer === "thread" ? "flex" : "hidden",
-        "md:flex"
-      )}>
-        {/* Mobile thread header w/ back + details */}
+      {/* Main chat area */}
+      <div
+        className={cn(
+          "flex-1 flex-col min-w-0",
+          mobilePanel === "thread" ? "flex" : "hidden md:flex"
+        )}
+      >
+        {/* Mobile-only header bar */}
         {selectedConvo && (
-          <div className="md:hidden flex items-center gap-1 px-2 py-2 border-b border-border flex-shrink-0 bg-background">
+          <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0">
             <button
-              onClick={() => setLayer("nav")}
-              className="p-2 rounded-lg hover:bg-secondary active:bg-secondary transition-colors"
-              aria-label="Back to inbox"
+              onClick={() => setMobilePanel("sidebar")}
+              className="p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4" />
             </button>
-            <span className="text-sm font-semibold flex-1 truncate">Chat</span>
+            <span className="text-sm font-medium flex-1">Conversation</span>
             <button
-              onClick={openDetails}
-              className="p-2 rounded-lg hover:bg-secondary transition-colors"
-              aria-label="Visitor details"
+              onClick={() => setMobilePanel("details")}
+              className="p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer"
             >
-              <Info className="h-5 w-5 text-muted-foreground" />
+              <Info className="h-4 w-4" />
             </button>
           </div>
         )}
         {selectedConvo ? (
           <ConversationThread conversationId={selectedConvo} />
         ) : (
-          <div className="flex-1 hidden md:flex flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <MessageSquare className="h-8 w-8 text-primary/30" />
+              <MessageSquare className="h-8 w-8 text-primary/40" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-foreground mb-1">
-                {openCount === 0 ? "Waiting for your first chat" : "Select a conversation"}
-              </h2>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                {openCount === 0
-                  ? "Install the widget on your site — new chats land here in real time."
-                  : "Choose a chat from the inbox to start helping."}
+              <h2 className="text-lg font-semibold text-foreground mb-1">Select a Conversation</h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Choose a conversation from the sidebar to view messages and visitor details.
               </p>
             </div>
+            {openCount === 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/50 border border-border">
+                <Zap className="h-4 w-4 text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  Embed the widget on your site to start receiving chats
+                </p>
+              </div>
+            )}
           </div>
         )}
-      </main>
+      </div>
 
-      {/* ══ Details column ══ */}
-      <aside className={cn(
-        "flex-col border-l border-border",
-        "w-full md:w-72 md:flex-shrink-0",
-        layer === "details" ? "flex" : "hidden",
-        "xl:flex" // always visible on wide screens
-      )}>
-        <div className="md:hidden xl:hidden flex items-center gap-1 px-2 py-2 border-b border-border flex-shrink-0">
+      {/* Right panel — visitor + live */}
+      <div
+        className={cn(
+          "w-full md:w-72 flex-shrink-0 flex-col border-l border-border",
+          mobilePanel === "details" ? "flex" : "hidden md:flex"
+        )}
+      >
+        {/* Mobile-only back bar */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0">
           <button
-            onClick={() => setLayer(selectedConvo ? "thread" : "nav")}
-            className="p-2 rounded-lg hover:bg-secondary transition-colors"
-            aria-label="Back"
+            onClick={() => setMobilePanel("thread")}
+            className="p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-semibold">Visitor details</span>
+          <span className="text-sm font-medium">Details</span>
+        </div>
+        <div className="flex border-b border-border flex-shrink-0">
+          <button
+            onClick={() => setRightPanel("visitor")}
+            className={cn(
+              "flex-1 text-xs py-2.5 font-medium transition-colors cursor-pointer",
+              rightPanel === "visitor"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Visitor Details
+          </button>
+          <button
+            onClick={() => setRightPanel("live")}
+            className={cn(
+              "flex-1 text-xs py-2.5 font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5",
+              rightPanel === "live"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Live
+          </button>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden">
-          <VisitorPanel conversationId={selectedConvo} visitorId={selectedVisitorId} />
+          {rightPanel === "visitor" ? (
+            <VisitorPanel conversationId={selectedConvo} visitorId={selectedVisitorId} />
+          ) : (
+            <LiveVisitorsPanel onSelect={handleSelectVisitor} />
+          )}
         </div>
-      </aside>
+      </div>
     </div>
   );
 }
@@ -320,26 +281,21 @@ export default function Dashboard() {
   return (
     <>
       <AuthLoading>
-        <div className="h-dvh flex items-center justify-center bg-background">
-          <div className="space-y-3 text-center">
-            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center mx-auto">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
-            <Skeleton className="h-3 w-32 mx-auto rounded" />
-          </div>
+        <div className="h-screen flex items-center justify-center bg-background">
+          <Skeleton className="h-12 w-48 rounded-lg" />
         </div>
       </AuthLoading>
       <Unauthenticated>
-        <div className="h-dvh flex items-center justify-center bg-background px-4">
-          <div className="text-center space-y-6 w-full max-w-sm">
-            <div className="w-14 h-14 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto">
-              <Zap className="h-7 w-7 text-primary" />
+        <div className="h-screen flex items-center justify-center bg-background px-4">
+          <div className="text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto">
+              <Zap className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground mb-1">NeuralSupport</h1>
-              <p className="text-sm text-muted-foreground">Sign in to your agent dashboard</p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">NeuralSupport</h1>
+              <p className="text-muted-foreground text-sm">Sign in to access the agent dashboard</p>
             </div>
-            <SignInButton className="w-full" />
+            <SignInButton className="mx-auto" />
           </div>
         </div>
       </Unauthenticated>
