@@ -586,7 +586,6 @@ function getWidgetJs(): string {
       renderQuickQuestions();
       if (!visitorName) showIdentityForm();
     }
-    fetchGeoOnce();
     startPolling();
   }
 
@@ -744,6 +743,11 @@ function getWidgetJs(): string {
     siteUrl: SITE_URL,
   }).catch(function(){});
 
+  // Resolve geo location immediately on page load, not gated behind opening the
+  // chat — the live-visitors dashboard needs to show where people are while
+  // they're just browsing, not only once they start chatting.
+  fetchGeoOnce();
+
   // Track page navigation (SPA-friendly)
   var lastPage = window.location.href;
   setInterval(function() {
@@ -757,9 +761,9 @@ function getWidgetJs(): string {
     }
   }, 1500);
 
-  // Get geo location — deferred until widget opens to avoid leaking on every page load.
-  // ipapi.co's free tier rate-limits hard (429s in normal traffic); ipwho.is has a much
-  // more generous anonymous quota and returns the same shape of data.
+  // Get geo location. ipapi.co's free tier rate-limits hard (429s in normal
+  // traffic); ipwho.is has a much more generous anonymous quota and returns
+  // the same shape of data.
   var geoFetched = false;
   function fetchGeoOnce() {
     if (geoFetched) return;
