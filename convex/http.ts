@@ -244,7 +244,17 @@ function getWidgetJs(): string {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: name, args: args, format: 'json' }),
-    }).then(function(r) { return r.json(); }).then(function(d) { return d.value; });
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      // Convex returns { status: 'error', ... } with an HTTP 200 — without this
+      // check, every ConvexError (rate limits included) silently resolved as a
+      // no-op "success" and .catch() handlers never fired.
+      if (d.status === 'error') {
+        var err = new Error(d.errorMessage || 'Request failed');
+        err.data = d.errorData;
+        throw err;
+      }
+      return d.value;
+    });
   }
 
   function convexQuery(name, args) {
@@ -678,7 +688,10 @@ function getWidgetJs(): string {
       if (result) conversationId = result.conversationId;
     }).catch(function(e) {
       removeTyping();
-      addMessage({ tempId: 'err_' + Date.now(), role: 'ai', content: 'Sorry, something went wrong. Please try again.' });
+      var friendly = (e && e.data && e.data.code === 'RATE_LIMITED' && e.data.message)
+        ? e.data.message
+        : 'Sorry, something went wrong. Please try again.';
+      addMessage({ tempId: 'err_' + Date.now(), role: 'ai', content: friendly });
     });
   }
 

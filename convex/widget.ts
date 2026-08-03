@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { ConvexError } from "convex/values";
 import { normalizeSiteUrl } from "./siteUrl";
+import { rateLimiter } from "./rateLimiter";
 
 // Called by the widget when a visitor sends a message
 export const visitorSendMessage = mutation({
@@ -12,6 +13,17 @@ export const visitorSendMessage = mutation({
     siteUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { ok, retryAfter } = await rateLimiter.limit(ctx, "visitorMessage", {
+      key: args.sessionId,
+    });
+    if (!ok) {
+      throw new ConvexError({
+        message: "You're sending messages too quickly. Please wait a moment and try again.",
+        code: "RATE_LIMITED",
+        retryAfter,
+      });
+    }
+
     // Get or create visitor
     let visitor = await ctx.db
       .query("visitors")
@@ -113,6 +125,9 @@ export const widgetInit = mutation({
     siteUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { ok } = await rateLimiter.limit(ctx, "widgetInit", { key: args.sessionId });
+    if (!ok) return { visitorId: undefined };
+
     const now = new Date().toISOString();
 
     let visitor = await ctx.db
