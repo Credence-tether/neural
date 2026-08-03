@@ -32,7 +32,15 @@ export const sendMessage = mutation({
       timestamp: new Date().toISOString(),
     });
 
+    // Sending a reply is the takeover action — an agent typing into a chat
+    // should never require a separate "take over" click first, same as every
+    // other live-chat tool. agentTakeOver() still exists for claiming a chat
+    // without sending a message yet (e.g. to read it before replying).
     await ctx.db.patch(args.conversationId, {
+      agentMode: true,
+      status: "agent_handling",
+      assignedAgentId: agentId,
+      aiStruggling: false,
       lastMessageAt: new Date().toISOString(),
     });
 

@@ -270,8 +270,17 @@ export default function ConversationThread({ conversationId }: Props) {
       </div>
 
       {/* ── Composer ── */}
-      {!isClosed && isAgentMode && (
+      {!isClosed && (
         <div className="p-2.5 md:p-3 border-t border-border flex-shrink-0 relative bg-background pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          {!isAgentMode && (
+            <button
+              onClick={handleTakeOver}
+              className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-secondary/60 border border-border hover:bg-secondary hover:border-primary/30 transition-colors cursor-pointer"
+            >
+              <Bot className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">AI is replying — sending a message takes over, or <span className="text-primary font-medium">tap to take over now</span></span>
+            </button>
+          )}
           {/* Canned dropdown */}
           {slashQuery !== null && filteredCanned.length > 0 && (
             <div className="absolute bottom-full left-2.5 right-2.5 mb-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden z-20">
@@ -325,19 +334,6 @@ export default function ConversationThread({ conversationId }: Props) {
               <Send className="h-4.5 w-4.5" />
             </button>
           </div>
-        </div>
-      )}
-
-      {/* ── AI handling footer ── */}
-      {!isClosed && !isAgentMode && (
-        <div className="p-2.5 md:p-3 border-t border-border flex-shrink-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-          <button
-            onClick={handleTakeOver}
-            className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-secondary/60 border border-border hover:bg-secondary hover:border-primary/30 transition-colors cursor-pointer"
-          >
-            <Bot className="h-4 w-4 text-primary" />
-            <span className="text-sm text-muted-foreground">AI is replying — <span className="text-primary font-medium">tap to take over</span></span>
-          </button>
         </div>
       )}
 
